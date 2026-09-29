@@ -20,11 +20,16 @@ workflows:
       - name: Install Node.js dependencies
         script: |
           npm install --legacy-peer-deps --include=optional
-          npm install --no-save @rolldown/binding-darwin-arm64 @esbuild/darwin-arm64 || true
+          npm install --no-save @rolldown/binding-darwin-arm64 @esbuild/darwin-arm64 lightningcss-darwin-arm64 || true
       - name: Build web app distribution
         script: |
-          npm run build || echo "Web build completed or using prebuilt distribution"
+          if [ -f "dist/index.html" ]; then
+            echo "Pre-built web distribution found in repository."
+          else
+            npm run build || true
+          fi
           if [ ! -f "dist/index.html" ]; then
+            echo "Fallback building web app..."
             npx vite build
           fi
       - name: Initialize and synchronize Capacitor Android platform
