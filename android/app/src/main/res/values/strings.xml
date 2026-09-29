@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Pencil Flow</string>
+    <string name="title_activity_main">Pencil Flow</string>
+    <string name="package_name">com.pencilflow.game</string>
+    <string name="custom_url_scheme">com.pencilflow.game</string>
+</resources>
