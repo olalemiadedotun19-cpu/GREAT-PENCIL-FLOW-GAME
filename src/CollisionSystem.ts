@@ -6,6 +6,7 @@ export interface CollisionResult {
   obstacle?: ObstacleInstance;
   reason?: string;
   closeCall?: boolean;
+  rampLaunch?: boolean;
 }
 
 export class CollisionSystem {
@@ -18,10 +19,14 @@ export class CollisionSystem {
       return { hit: false };
     }
 
-    const ballRadius = playerBall.getRadius();
+    const ballRadius = playerBall.getRadius(); // 0.6
     const ballDist = ballState.distance;
     const ballOffset = ballState.lateralOffset;
     const ballJump = ballState.jumpHeight;
+
+    // Contact padding: in high-speed runner games, the physical core is 70-80% of visual mesh.
+    // Glancing grazing near-misses must NOT trigger fatal collisions.
+    const contactRadius = ballRadius * 0.45; // ~0.27m
 
     const obstacles = obstacleSystem.getActiveObstacles();
     let detectedCloseCall = false;
@@ -30,41 +35,52 @@ export class CollisionSystem {
       if (!obs.active || !obs.drawn) continue;
 
       const longitudinalDist = Math.abs(ballDist - obs.distance);
-      const hitDepth = obs.depth * 0.5 + ballRadius * 0.75;
+      
+      // Tight, physically accurate longitudinal reach (no invisible wall ahead/behind)
+      const hitDepth = (obs.depth * 0.38) + contactRadius;
 
-      // Longitudinal reach
       if (longitudinalDist > hitDepth) continue;
 
-      // 0. CHASM GAPS & FISSURES (Must jump or steer around!)
-      if (obs.type === 'PAPER_CHASM_GAP') {
-        // Spans entire ribbon width — jumping clears the chasm!
-        if (ballJump < 0.25) {
-          return {
-            hit: true,
-            obstacle: obs,
-            reason: 'Plunged into an open paper tear chasm',
-            closeCall: false,
-          };
+      // 0. ELEVATED RAMP JUMP (Launches ball into a high jump instead of crashing!)
+      if (obs.type === 'ELEVATED_RAMP_JUMP') {
+        const lateralDist = Math.abs(ballOffset - obs.currentLateralOffset);
+        if (lateralDist <= (obs.width * 0.45) + contactRadius) {
+          return { hit: false, rampLaunch: true };
         }
-        // Jumped cleanly across the chasm!
+        continue;
+      }
+
+      // 1. CHASM GAPS & FISSURES (Jumping clears!)
+      if (obs.type === 'PAPER_CHASM_GAP') {
+        // Physical void gap extent
+        const gapHalfReach = (obs.depth * 0.32) + contactRadius;
+        if (longitudinalDist <= gapHalfReach) {
+          // If airborne with even modest jump height, player cleanly clears the gap!
+          if (ballJump < 0.15) {
+            return {
+              hit: true,
+              obstacle: obs,
+              reason: 'Plunged into an open paper tear chasm',
+              closeCall: false,
+            };
+          }
+        }
         continue;
       }
 
       if (obs.type === 'CRACKED_FISSURE') {
-        // Localized paper tear in a lane:
-        // 1. Can safely steer around it if in another lane!
         const lateralDist = Math.abs(ballOffset - obs.currentLateralOffset);
-        const hitWidth = obs.width * 0.5 + ballRadius * 0.65;
+        const fissureHitWidth = (obs.width * 0.38) + contactRadius;
 
-        // Razor close call dodge
-        if (!obs.closeCallChecked && lateralDist > hitWidth && lateralDist <= hitWidth + 0.85) {
+        // Close call bonus if weaving right past the edge
+        if (!obs.closeCallChecked && lateralDist > fissureHitWidth && lateralDist <= fissureHitWidth + 0.65) {
           obs.closeCallChecked = true;
           detectedCloseCall = true;
         }
 
-        if (lateralDist <= hitWidth) {
-          // Inside fissure lane — player can vault over with a jump!
-          if (ballJump < 0.22) {
+        if (lateralDist <= fissureHitWidth) {
+          // Inside fissure lane — jumping vaults right over it!
+          if (ballJump < 0.15) {
             return {
               hit: true,
               obstacle: obs,
@@ -73,19 +89,18 @@ export class CollisionSystem {
             };
           }
         }
-        // Steered around or jumped cleanly!
         continue;
       }
 
-      // 1. OVERHEAD OBSTACLE CATEGORY
+      // 2. OVERHEAD OBSTACLE CATEGORY (Low Ceiling Arch, Cranes, Girders)
       if (obs.category === 'OVERHEAD') {
         const lateralDist = Math.abs(ballOffset - obs.currentLateralOffset);
-        const hitWidth = obs.width * 0.5 + ballRadius * 0.7;
+        const hitWidth = (obs.width * 0.42) + contactRadius;
 
         if (lateralDist <= hitWidth) {
           if (obs.type === 'FALLING_PLUMB_BOB') {
-            // If weight dropped down onto the ball
-            if ((obs.fallProgress || 0) > 0.55 && ballJump < 2.0) {
+            // Only fatal if plumb bob weight has actually dropped onto the road
+            if ((obs.fallProgress || 0) > 0.82 && ballJump < 1.4) {
               return {
                 hit: true,
                 obstacle: obs,
@@ -95,9 +110,12 @@ export class CollisionSystem {
             }
           }
 
-          const clearance = obs.overheadClearanceBottom || 1.8;
-          // Safe to roll underneath! Danger if player jumped high into the beam!
-          if (ballJump >= clearance) {
+          // Overhead clearance: the bottom of the beam
+          const clearance = obs.overheadClearanceBottom || 2.0;
+          const ballTop = ballJump + ballRadius * 2; // Total elevation of top of ball
+
+          // Rolling under is 100% safe! Only fatal if player jumped UP into the beam!
+          if (ballTop >= clearance + 0.1) {
             return {
               hit: true,
               obstacle: obs,
@@ -109,76 +127,143 @@ export class CollisionSystem {
         continue;
       }
 
-      // 2. SIDE CLOSING / VICE CATEGORY
+      // 3. SIDE CLOSING / VICE CATEGORY (Eraser vice jaws)
       if (obs.category === 'SIDE_CLOSING') {
-        // Safe channel is between [-obs.motionAmplitude, obs.motionAmplitude]
-        const safeHalfWidth = obs.motionAmplitude || 1.8;
-        if (Math.abs(ballOffset) > safeHalfWidth - ballRadius * 0.6) {
-          if (ballJump < obs.height * 0.85) {
+        if (obs.type === 'SIDE_ERASER_SWEEP') {
+          const sweepHitWidth = (obs.width * 0.40) + contactRadius;
+          const lateralDist = Math.abs(ballOffset - obs.currentLateralOffset);
+          if (lateralDist <= sweepHitWidth) {
+            if (ballJump < obs.height * 0.65) {
+              return {
+                hit: true,
+                obstacle: obs,
+                reason: 'Swept off the road by giant eraser barrier',
+                closeCall: false,
+              };
+            }
+          } else if (!obs.closeCallChecked && lateralDist <= sweepHitWidth + 0.6) {
+            obs.closeCallChecked = true;
+            detectedCloseCall = true;
+          }
+        } else {
+          // Sliding vice jaws with moving parts
+          // Calculate physical inner boundaries based on animated positions
+          const leftInnerEdge = obs.viceLeftPart ? obs.viceLeftPart.position.x + 1.7 : -1.8;
+          const rightInnerEdge = obs.viceRightPart ? obs.viceRightPart.position.x - 1.7 : 1.8;
+
+          const ballLeft = ballOffset - contactRadius;
+          const ballRight = ballOffset + contactRadius;
+
+          // Vaulting over vice blocks
+          if (ballJump >= obs.height * 0.70) {
+            continue;
+          }
+
+          // Check if ball struck either moving wall
+          if (ballLeft < leftInnerEdge || ballRight > rightInnerEdge) {
             return {
               hit: true,
               obstacle: obs,
               reason: 'Crushed by closing drafting vice walls',
               closeCall: false,
             };
+          } else if (!obs.closeCallChecked && (ballLeft < leftInnerEdge + 0.35 || ballRight > rightInnerEdge - 0.35)) {
+            obs.closeCallChecked = true;
+            detectedCloseCall = true;
           }
-        } else if (!obs.closeCallChecked && Math.abs(ballOffset) > safeHalfWidth - ballRadius * 1.4) {
+        }
+        continue;
+      }
+
+      // 4. VERTICAL CATEGORY (Rising Graphite Pillars / Folded Paper)
+      if (obs.category === 'VERTICAL') {
+        // If pillar is recessed below the floor surface, completely safe
+        if (obs.currentHeightOffset > 0.3) {
+          const lateralDist = Math.abs(ballOffset - obs.currentLateralOffset);
+          const hitWidth = (obs.width * 0.40) + contactRadius;
+
+          if (lateralDist <= hitWidth) {
+            // If ball jumped higher than the rising pillar top, sails right over
+            if (ballJump < obs.currentHeightOffset * 0.75) {
+              return {
+                hit: true,
+                obstacle: obs,
+                reason: this.getCrashReason(obs),
+                closeCall: false,
+              };
+            }
+          } else if (!obs.closeCallChecked && lateralDist <= hitWidth + 0.65) {
+            obs.closeCallChecked = true;
+            detectedCloseCall = true;
+          }
+        }
+        continue;
+      }
+
+      // 5. BOUNCING HAZARDS (Bouncing Paper Boulder)
+      if (obs.motionType === 'BOUNCE_Y' || obs.type === 'BOUNCING_PAPER_BOULDER') {
+        const lateralDist = Math.abs(ballOffset - obs.currentLateralOffset);
+        const hitWidth = (obs.width * 0.38) + contactRadius;
+
+        if (lateralDist <= hitWidth) {
+          const boulderCenterY = obs.currentHeightOffset;
+          const boulderBottom = boulderCenterY - (obs.height * 0.38);
+          const boulderTop = boulderCenterY + (obs.height * 0.38);
+          const ballTop = ballJump + ballRadius * 2;
+          const ballBottom = ballJump;
+
+          // Check vertical separation:
+          // 1. Can roll SAFELY UNDER the boulder when it bounces high!
+          // 2. Can jump SAFELY OVER the boulder!
+          const rollsUnder = ballTop < boulderBottom - 0.1;
+          const jumpsOver = ballBottom > boulderTop + 0.1;
+
+          if (!rollsUnder && !jumpsOver) {
+            return {
+              hit: true,
+              obstacle: obs,
+              reason: 'Crushed by bouncing paper boulder',
+              closeCall: false,
+            };
+          }
+        } else if (!obs.closeCallChecked && lateralDist <= hitWidth + 0.65) {
           obs.closeCallChecked = true;
           detectedCloseCall = true;
         }
         continue;
       }
 
-      // 3. VERTICAL CATEGORY (Rising Pillars / Descending Stamps)
-      if (obs.category === 'VERTICAL') {
-        // If pillar has risen above ground level
-        if (obs.currentHeightOffset > 0.4) {
-          const lateralDist = Math.abs(ballOffset - obs.currentLateralOffset);
-          const hitWidth = obs.width * 0.5 + ballRadius * 0.75;
-
-          if (lateralDist <= hitWidth && ballJump < obs.currentHeightOffset + 0.3) {
-            return {
-              hit: true,
-              obstacle: obs,
-              reason: this.getCrashReason(obs),
-              closeCall: false,
-            };
-          }
-        }
-        continue;
-      }
-
-      // 4. MOVING & FLOOR CATEGORIES
+      // 6. STANDARD FLOOR & MOVING OBSTACLES (Sharpener, Eraser, Putty, Rulers, Spikes, etc.)
       const lateralDist = Math.abs(ballOffset - obs.currentLateralOffset);
-      const hitWidth = obs.width * 0.5 + ballRadius * 0.75;
+      const hitWidth = (obs.width * 0.38) + contactRadius;
 
-      // Close call detection (razor margin dodge)
+      // Close call detection (razor margin dodge rewarded with combo points)
       if (
         !obs.closeCallChecked &&
         lateralDist > hitWidth &&
-        lateralDist <= hitWidth + 0.95 &&
-        longitudinalDist < hitDepth * 0.65
+        lateralDist <= hitWidth + 0.65 &&
+        longitudinalDist < hitDepth * 0.7
       ) {
         obs.closeCallChecked = true;
         detectedCloseCall = true;
       }
 
+      // Ball is outside lateral bounds — cleanly avoided!
       if (lateralDist > hitWidth) continue;
 
-      // Jump vaulting check
+      // Jump vaulting:
+      // Jumpable obstacles can be vaulted if ball elevation clears ~65% of obstacle height
       if (obs.jumpable) {
-        if (ballJump >= obs.height * 0.78) {
-          // Vaulted cleanly over!
-          continue;
+        if (ballJump >= obs.height * 0.65) {
+          continue; // Vaulted cleanly over!
         }
       } else {
-        // Non-jumpable
-        if (ballJump >= obs.height * 1.1) {
+        if (ballJump >= obs.height * 0.95) {
           continue;
         }
       }
 
-      // Collision confirmed
+      // Direct physical collision confirmed
       return {
         hit: true,
         obstacle: obs,

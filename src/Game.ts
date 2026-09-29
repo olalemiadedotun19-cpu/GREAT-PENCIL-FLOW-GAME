@@ -601,6 +601,13 @@ export class Game {
     // 14. Collision detection
     const colResult = this.collisionSystem.checkCollisions(this.playerBall, this.obstacleSystem);
 
+    if (colResult.rampLaunch && !this.playerBall.state.isAirborne) {
+      this.triggerJump();
+      this.playerBall.state.jumpVelocity = CONFIG.player.jumpForce * 1.35;
+      this.ui.showToast('RAMP LAUNCH! +100');
+      this.gameState.score += 100 * this.comboMultiplier;
+    }
+
     if (colResult.closeCall) {
       this.runCloseCalls++;
       this.comboTimer = 3.8;

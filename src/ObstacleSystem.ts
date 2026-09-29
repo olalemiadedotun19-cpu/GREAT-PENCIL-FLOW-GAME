@@ -291,9 +291,9 @@ export class ObstacleSystem {
         // Two side blocks sliding in and out periodically, leaving a predictable timed corridor
         const closeFactor = (Math.sin(t) + 1.0) * 0.5; // 0 (open) to 1 (closed)
         if (obs.viceLeftPart && obs.viceRightPart) {
-          const shift = closeFactor * obs.motionAmplitude;
-          obs.viceLeftPart.position.x = -shift;
-          obs.viceRightPart.position.x = shift;
+          const shift = closeFactor * (obs.motionAmplitude || 1.4);
+          obs.viceLeftPart.position.x = -3.6 + shift;
+          obs.viceRightPart.position.x = 3.6 - shift;
         }
         break;
       }
@@ -464,7 +464,7 @@ export class ObstacleSystem {
     switch (type) {
       case 'PAPER_CHASM_GAP': {
         // A void tear across the whole road ribbon! Must jump!
-        width = 11.5; height = 0.6; depth = 4.2;
+        width = 11.5; height = 0.5; depth = 3.6;
         jumpable = true;
         requiresJump = true;
         
@@ -501,30 +501,30 @@ export class ObstacleSystem {
         break;
       }
       case 'ROLLING_PENCIL_SHAVING': {
-        width = 2.2; height = 2.0; depth = 2.2;
+        width = 2.0; height = 1.8; depth = 2.0;
         jumpable = true;
         motionType = 'SLIDE_X';
-        motionAmplitude = 3.2;
-        motionSpeed = 2.2;
+        motionAmplitude = 2.8;
+        motionSpeed = 2.0;
         // Curled shaving ribbon model
-        const torusGeo = new THREE.TorusGeometry(0.85, 0.25, 8, 16, Math.PI * 1.5);
+        const torusGeo = new THREE.TorusGeometry(0.8, 0.22, 8, 16, Math.PI * 1.5);
         const mesh = new THREE.Mesh(torusGeo, this.woodRulerMat);
         mesh.rotation.x = Math.PI / 2;
         meshGroup.add(mesh, this.createOutlines(torusGeo));
         break;
       }
       case 'GRAPHITE_BOULDER': {
-        width = 2.5; height = 1.8; depth = 2.2;
+        width = 2.0; height = 1.6; depth = 2.0;
         jumpable = true;
-        const geo = new THREE.DodecahedronGeometry(1.1, 0);
+        const geo = new THREE.DodecahedronGeometry(0.95, 0);
         const mesh = new THREE.Mesh(geo, this.graphiteMat);
-        mesh.position.y = 0.9;
+        mesh.position.y = 0.8;
         meshGroup.add(mesh, this.createOutlines(geo));
         break;
       }
       case 'CRACKED_FISSURE': {
         // High-contrast, clearly visible paper crevasse in a specific lane!
-        width = 3.8; height = 0.5; depth = 3.0;
+        width = 2.4; height = 0.45; depth = 2.6;
         jumpable = true;
         requiresJump = true;
 
@@ -536,39 +536,39 @@ export class ObstacleSystem {
 
         // 2. Bold jagged ripped paper borders around the fissure perimeter
         const lipMat = this.paperCrumpleMat;
-        const leftLip = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.25, depth * 1.05), lipMat);
-        leftLip.position.set(-width * 0.5, 0.12, 0);
-        const rightLip = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.25, depth * 1.05), lipMat);
-        rightLip.position.set(width * 0.5, 0.12, 0);
-        const approachLip = new THREE.Mesh(new THREE.BoxGeometry(width, 0.25, 0.4), lipMat);
-        approachLip.position.set(0, 0.12, -depth * 0.5);
+        const leftLip = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.22, depth * 1.05), lipMat);
+        leftLip.position.set(-width * 0.5, 0.11, 0);
+        const rightLip = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.22, depth * 1.05), lipMat);
+        rightLip.position.set(width * 0.5, 0.11, 0);
+        const approachLip = new THREE.Mesh(new THREE.BoxGeometry(width, 0.22, 0.3), lipMat);
+        approachLip.position.set(0, 0.11, -depth * 0.5);
         meshGroup.add(leftLip, rightLip, approachLip);
 
         // 3. High-visibility danger warning hatch strip on the road approach
-        const cautionGeo = new THREE.PlaneGeometry(width * 1.1, 0.75);
+        const cautionGeo = new THREE.PlaneGeometry(width * 1.05, 0.65);
         cautionGeo.rotateX(-Math.PI / 2);
         const cautionMesh = new THREE.Mesh(cautionGeo, this.neonYellowMat);
-        cautionMesh.position.set(0, 0.06, -depth * 0.72);
+        cautionMesh.position.set(0, 0.06, -depth * 0.68);
         meshGroup.add(cautionMesh);
 
         // 4. Two bright upright drafting hazard flags on the left and right rim
         for (const sign of [-1, 1]) {
-          const pinPole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 1.6, 6), this.metalSteelMat);
-          pinPole.position.set(sign * (width * 0.52), 0.8, -depth * 0.35);
-          const flag = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.35, 0.04), this.pushpinRedMat);
-          flag.position.set(sign * (width * 0.52), 1.35, -depth * 0.35);
+          const pinPole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 1.5, 6), this.metalSteelMat);
+          pinPole.position.set(sign * (width * 0.52), 0.75, -depth * 0.35);
+          const flag = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.3, 0.04), this.pushpinRedMat);
+          flag.position.set(sign * (width * 0.52), 1.25, -depth * 0.35);
           meshGroup.add(pinPole, flag);
         }
 
         // 5. Pulsing hazard beacon
-        const beaconGeo = new THREE.SphereGeometry(0.22, 8, 8);
+        const beaconGeo = new THREE.SphereGeometry(0.2, 8, 8);
         const beaconMesh = new THREE.Mesh(beaconGeo, this.dangerBeaconMat);
-        beaconMesh.position.set(0, 1.8, 0);
+        beaconMesh.position.set(0, 1.6, 0);
         meshGroup.add(beaconMesh);
         break;
       }
       case 'PENCIL_SHARPENER': {
-        width = 2.2; height = 1.3; depth = 2.4;
+        width = 2.0; height = 1.2; depth = 2.0;
         const bodyGeo = new THREE.BoxGeometry(width, height, depth);
         const body = new THREE.Mesh(bodyGeo, this.metalSteelMat);
         body.position.y = height * 0.5;
@@ -576,7 +576,7 @@ export class ObstacleSystem {
         break;
       }
       case 'ERASER_BLOCK': {
-        width = 2.6; height = 1.5; depth = 2.0;
+        width = 2.2; height = 1.3; depth = 1.8;
         const geo = new THREE.BoxGeometry(width, height, depth);
         const mesh = new THREE.Mesh(geo, this.pinkRubberMat);
         mesh.position.y = height * 0.5;
@@ -584,19 +584,19 @@ export class ObstacleSystem {
         break;
       }
       case 'GRAPHITE_SPIKES': {
-        width = 2.4; height = 1.2; depth = 2.4;
+        width = 2.2; height = 1.1; depth = 2.2;
         for (let i = -1; i <= 1; i++) {
           for (let j = -1; j <= 1; j++) {
-            const coneGeo = new THREE.ConeGeometry(0.24, height, 6);
+            const coneGeo = new THREE.ConeGeometry(0.22, height, 6);
             const spike = new THREE.Mesh(coneGeo, this.graphiteMat);
-            spike.position.set(i * 0.75, height * 0.5, j * 0.75);
+            spike.position.set(i * 0.65, height * 0.5, j * 0.65);
             meshGroup.add(spike);
           }
         }
         break;
       }
       case 'WOODEN_RULER': {
-        width = 3.2; height = 0.8; depth = 1.0;
+        width = 2.4; height = 0.7; depth = 0.8;
         const geo = new THREE.BoxGeometry(width, height, depth);
         const mesh = new THREE.Mesh(geo, this.woodRulerMat);
         mesh.position.y = height * 0.5;
@@ -604,18 +604,18 @@ export class ObstacleSystem {
         break;
       }
       case 'THUMBTACK_PIN': {
-        width = 1.8; height = 1.6; depth = 1.8;
-        const capGeo = new THREE.CylinderGeometry(0.7, 0.45, 0.8, 12);
+        width = 1.6; height = 1.5; depth = 1.6;
+        const capGeo = new THREE.CylinderGeometry(0.6, 0.4, 0.7, 12);
         const cap = new THREE.Mesh(capGeo, this.pushpinRedMat);
-        cap.position.y = 1.2;
-        const pinGeo = new THREE.CylinderGeometry(0.06, 0.02, 1.0, 6);
+        cap.position.y = 1.15;
+        const pinGeo = new THREE.CylinderGeometry(0.06, 0.02, 0.9, 6);
         const pin = new THREE.Mesh(pinGeo, this.metalSteelMat);
-        pin.position.y = 0.5;
+        pin.position.y = 0.45;
         meshGroup.add(cap, pin);
         break;
       }
       case 'STAPLE_STRIP': {
-        width = 3.6; height = 0.7; depth = 0.8;
+        width = 2.4; height = 0.6; depth = 0.7;
         const geo = new THREE.BoxGeometry(width, height, depth);
         const mesh = new THREE.Mesh(geo, this.metalSteelMat);
         mesh.position.y = height * 0.5;
@@ -623,16 +623,16 @@ export class ObstacleSystem {
         break;
       }
       case 'XACTO_KNIFE': {
-        width = 3.0; height = 1.1; depth = 1.4;
-        const bladeGeo = new THREE.ConeGeometry(0.6, 2.2, 4);
+        width = 2.2; height = 1.0; depth = 1.2;
+        const bladeGeo = new THREE.ConeGeometry(0.5, 2.0, 4);
         bladeGeo.rotateZ(Math.PI / 3);
         const blade = new THREE.Mesh(bladeGeo, this.metalSteelMat);
-        blade.position.y = 0.6;
+        blade.position.y = 0.55;
         meshGroup.add(blade);
         break;
       }
       default: {
-        width = 2.4; height = 1.4; depth = 1.8;
+        width = 2.0; height = 1.2; depth = 1.6;
         const geo = new THREE.BoxGeometry(width, height, depth);
         const mesh = new THREE.Mesh(geo, this.pinkRubberMat);
         mesh.position.y = height * 0.5;
