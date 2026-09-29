@@ -1,0 +1,46 @@
+workflows:
+  android-capacitor:
+    name: Pencil Flow - Android APK & Bundle Build
+    max_build_duration: 30
+    instance_type: linux_x2
+    environment:
+      node: 20
+      java: 17
+      vars:
+        PACKAGE_NAME: "com.pencilflow.game"
+    triggering:
+      events:
+        - push
+        - tag
+      branch_patterns:
+        - pattern: '*'
+          include: true
+          source: true
+    scripts:
+      - name: Install Node.js dependencies
+        script: |
+          npm ci --legacy-peer-deps || npm install
+      - name: Build web app distribution
+        script: |
+          npm run build
+      - name: Initialize and synchronize Capacitor Android platform
+        script: |
+          # Add android platform if not already present in repo
+          if [ ! -d "android" ]; then
+            npx cap add android
+          fi
+          npx cap sync android
+      - name: Build Android APK (Debug & Release)
+        script: |
+          cd android
+          chmod +x gradlew
+          # 1. Build universal Debug APK (immediately installable on any Android phone without keystore)
+          ./gradlew assembleDebug
+          
+          # 2. Build Release APK and App Bundle (for Google Play distribution)
+          ./gradlew assembleRelease || true
+          ./gradlew bundleRelease || true
+    artifacts:
+      - android/app/build/outputs/apk/**/*.apk
+      - android/app/build/outputs/bundle/**/*.aab
+      - dist/**

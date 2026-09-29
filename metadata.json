@@ -1,0 +1,6 @@
+{
+  "name": "Pencil Flow",
+  "description": "The pencil draws. You roll. A minimalist 3D hand-drawn flowing roller slide game powered by Three.js.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

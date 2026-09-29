@@ -1,0 +1,640 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Pencil Flow</title>
+    <meta name="description" content="The pencil draws. You roll. A minimalist 3D hand-drawn flowing roller slide game powered by Three.js." />
+    <meta property="og:title" content="Pencil Flow" />
+    <meta property="og:description" content="The pencil draws. You roll. A minimalist 3D hand-drawn flowing roller slide game powered by Three.js." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Architects+Daughter&family=Space+Grotesk:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <meta name="theme-color" content="#f5f0e6" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="PencilFlow" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="stylesheet" href="/src/index.css" />
+  </head>
+  <body class="bg-[#f5f0e6] text-[#2b2723] overflow-hidden select-none m-0 p-0 w-full h-full">
+    <!-- Game Canvas Container -->
+    <div id="game-container" class="relative w-full h-screen overflow-hidden touch-none">
+      <canvas id="game-canvas" class="w-full h-full block"></canvas>
+
+      <!-- Paper Texture Overlay & Vignette -->
+      <div id="paper-overlay" class="pointer-events-none absolute inset-0 z-10 opacity-35"></div>
+
+      <!-- IN-GAME HUD: Anchored strictly to outer side margins to keep the road ahead 100% unobstructed -->
+      <div id="hud" class="absolute inset-0 pointer-events-none z-20 hidden">
+        <!-- TOP-LEFT CORNER: Distance, Stage, Score & Combo -->
+        <div class="absolute top-3 left-3 sm:top-4 sm:left-4 flex flex-col items-start gap-1.5 pointer-events-auto max-w-[150px] sm:max-w-[180px]">
+          <!-- Distance & Chapter -->
+          <div class="sketch-panel w-full px-2.5 py-1.5 bg-[#fdfbf7]/90 rounded-xl border border-[#2b2723]/50 shadow-[2px_2px_0px_#2b2723]/30 text-left">
+            <div class="text-[9px] uppercase tracking-wider text-[#726a61] font-bold">Distance</div>
+            <div id="hud-distance" class="text-lg sm:text-xl font-black text-[#221f1d] tracking-tight leading-tight">0 <span class="text-[10px] font-normal text-[#726a61]">m</span></div>
+            <div id="hud-stage-name" class="text-[8px] font-bold uppercase tracking-wider text-[#92400e] truncate">CH. I: SKETCHBOOK</div>
+          </div>
+
+          <!-- Score & Multiplier -->
+          <div class="w-full flex items-center gap-1.5">
+            <div class="sketch-panel flex-1 px-2.5 py-1 bg-[#fdfbf7]/90 rounded-xl border border-[#2b2723]/50 shadow-[2px_2px_0px_#2b2723]/30 text-left">
+              <div class="text-[9px] uppercase tracking-wider text-[#726a61] font-bold">Score</div>
+              <div id="hud-score" class="text-base sm:text-lg font-black text-[#221f1d] tracking-tight leading-tight">0</div>
+            </div>
+            <div id="hud-combo-badge" class="hidden sketch-panel px-1.5 py-1 bg-[#e07272] text-[#fdfbf7] rounded-lg border border-[#2b2723] shadow-[2px_2px_0px_#2b2723]/40 font-black text-[10px] tracking-wider animate-bounce">
+              <span id="hud-combo-text">x2</span>
+            </div>
+          </div>
+
+          <!-- Notification Toast (Anchored below left stats, completely off the center track) -->
+          <div id="hud-toast" class="w-full transform -translate-x-6 opacity-0 transition-all duration-300 text-left py-1 px-2.5 rounded-lg bg-[#2b2723]/95 text-[#f5f0e6] font-bold text-[10px] tracking-wider shadow-md flex items-center gap-1.5 mt-1">
+            <span>ACCELERATING!</span>
+          </div>
+        </div>
+
+        <!-- TOP-RIGHT CORNER: Pause, Speed, Graphite Shards, Boost -->
+        <div class="absolute top-3 right-3 sm:top-4 sm:right-4 flex flex-col items-end gap-1.5 pointer-events-auto">
+          <div class="flex items-center gap-1.5">
+            <!-- Graphite Shards -->
+            <div class="flex sketch-panel px-2 py-1 bg-[#fdfbf7]/90 rounded-xl border border-[#2b2723]/50 shadow-[2px_2px_0px_#2b2723]/30 items-center gap-1 text-[11px] font-bold">
+              <span id="hud-icon-graphite" class="inline-block text-[#2b2723] scale-90"></span>
+              <span id="hud-run-graphite">0</span>
+            </div>
+
+            <!-- Speed -->
+            <div class="sketch-panel px-2 py-1 bg-[#fdfbf7]/90 rounded-xl border border-[#2b2723]/50 shadow-[2px_2px_0px_#2b2723]/30 text-right">
+              <div class="text-[8px] uppercase tracking-wider text-[#726a61] font-bold">Speed</div>
+              <div id="hud-speed" class="text-xs sm:text-sm font-bold text-[#221f1d] leading-tight">12 <span class="text-[9px] font-normal text-[#726a61]">u/s</span></div>
+            </div>
+
+            <!-- Pause Button -->
+            <button id="btn-pause" aria-label="Pause Game" class="sketch-btn w-8 h-8 sm:w-9 sm:h-9 bg-[#fdfbf7] hover:bg-[#ede5d6] active:scale-95 flex items-center justify-center rounded-xl border border-[#2b2723] shadow-[2px_2px_0px_#2b2723]/40 text-[#2b2723]">
+              <span id="icon-pause-btn"></span>
+            </button>
+          </div>
+
+          <!-- Active Boost Indicator (Flush against right edge) -->
+          <div id="hud-boost" class="hidden flex items-center gap-1.5 py-1 px-2.5 rounded-full bg-[#dfab34] border border-[#2b2723] text-[#221f1d] font-black text-[10px] tracking-wider shadow-[2px_2px_0px_#2b2723]">
+            <span id="icon-lead-boost" class="inline-block scale-90"></span>
+            <span class="text-[9px]">2B BOOST</span>
+            <div class="w-12 h-1.5 bg-[#2b2723]/30 rounded-full overflow-hidden">
+              <div id="hud-boost-bar" class="w-full h-full bg-[#221f1d] transition-all duration-75"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- BOTTOM CONTROLS: Ergonomic Large Jump Button & Steering/Tap Hint -->
+        <div class="absolute bottom-3 left-3 pointer-events-none">
+          <div id="steer-hint" class="text-[11px] font-sketch text-[#70685e] bg-[#fdfbf7]/85 px-3 py-1 rounded-lg border border-[#2b2723]/25 shadow-sm">
+            Swipe to steer • Tap anywhere to jump
+          </div>
+        </div>
+
+        <div class="absolute bottom-3 right-3 sm:bottom-6 sm:right-6 pointer-events-auto">
+          <button id="btn-jump" aria-label="Jump over hazards" class="sketch-btn w-20 h-20 sm:w-24 sm:h-24 bg-[#fdfbf7] hover:bg-[#ede5d6] active:scale-95 active:shadow-[1px_1px_0px_#2b2723] rounded-3xl border-3 border-[#2b2723] shadow-[4px_4px_0px_#2b2723] flex flex-col items-center justify-center font-bold uppercase tracking-wider text-[#2b2723] select-none transition-all touch-manipulation">
+            <span id="icon-jump-btn" class="scale-125 sm:scale-150 mb-0.5"></span>
+            <span class="text-[11px] sm:text-xs tracking-widest font-black">JUMP</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- MAIN MENU 2.0 HUB -->
+      <div id="screen-menu" class="absolute inset-0 z-30 flex items-center justify-center p-3 sm:p-6 bg-[#f5f0e6]/90 backdrop-blur-[3px] overflow-y-auto">
+        <div class="w-full max-w-2xl flex flex-col items-center my-auto py-4">
+          
+          <!-- Top Player Status Card -->
+          <div class="w-full max-w-lg mb-4 p-3 bg-[#fdfbf7] border-2 border-[#2b2723] rounded-2xl shadow-[4px_4px_0px_#2b2723]/30 flex items-center justify-between text-xs sm:text-sm">
+            <!-- Player Level & XP -->
+            <div class="flex items-center gap-2.5">
+              <div class="w-8 h-8 rounded-xl bg-[#2b2723] text-[#fdfbf7] font-black flex items-center justify-center text-xs">
+                <span id="menu-player-level">1</span>
+              </div>
+              <div class="text-left">
+                <div class="text-[10px] uppercase font-bold tracking-wider text-[#756a5e]">Player Level</div>
+                <div class="w-24 sm:w-28 h-2 bg-[#2b2723]/15 rounded-full overflow-hidden mt-0.5">
+                  <div id="menu-xp-bar" class="w-1/3 h-full bg-[#2b2723] rounded-full"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Currency Badges -->
+            <div class="flex items-center gap-3">
+              <!-- Graphite -->
+              <div class="flex items-center gap-1.5 font-bold text-[#2b2723] bg-[#f4ece0] px-2.5 py-1 rounded-xl border border-[#2b2723]/30">
+                <span id="icon-top-graphite"></span>
+                <span id="menu-graphite-count">0</span>
+              </div>
+              <!-- Leads -->
+              <div class="flex items-center gap-1.5 font-bold text-[#b45309] bg-[#fef3c7] px-2.5 py-1 rounded-xl border border-[#d97706]/40">
+                <span id="icon-top-lead"></span>
+                <span id="menu-lead-count">0</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Hero Main Card -->
+          <div class="sketch-card w-full max-w-lg bg-[#fdfbf7] border-3 border-[#2b2723] rounded-3xl p-6 sm:p-7 shadow-[8px_8px_0px_#2b2723] flex flex-col items-center text-center relative overflow-hidden mb-4">
+            <!-- Decorative Tape -->
+            <div class="absolute -top-3 -left-3 w-12 h-6 bg-[#e4ded0]/80 rotate-[-25deg] border border-[#2b2723]/30"></div>
+            <div class="absolute -top-3 -right-3 w-12 h-6 bg-[#e4ded0]/80 rotate-[25deg] border border-[#2b2723]/30"></div>
+
+            <div class="w-12 h-12 mb-1 rounded-2xl border-2 border-[#2b2723] flex items-center justify-center text-[#2b2723] shadow-[3px_3px_0px_#2b2723]/30">
+              <span id="hero-pencil-icon"></span>
+            </div>
+
+            <h1 class="font-sketch text-4xl sm:text-5xl font-black tracking-wider text-[#221f1d] mb-1">
+              PENCIL FLOW
+            </h1>
+            <p class="font-sketch text-sm sm:text-base font-bold text-[#6d6357] tracking-widest mb-4 uppercase">
+              "THE PENCIL DRAWS. YOU ROLL."
+            </p>
+
+            <!-- Best Record Badge -->
+            <div class="mb-4 px-4 py-1.5 bg-[#f4ece0] rounded-xl border border-[#2b2723]/40 flex items-center gap-3">
+              <span class="text-[11px] font-bold uppercase tracking-wider text-[#756a5e]">Best Record</span>
+              <span id="menu-best-score" class="text-base font-black text-[#221f1d]">0 m</span>
+            </div>
+
+            <!-- Primary Actions -->
+            <div class="flex flex-col gap-2.5 w-full max-w-sm">
+              <button id="btn-play" class="sketch-btn w-full py-3.5 px-6 bg-[#2b2723] hover:bg-[#3d3833] active:scale-98 text-[#f5f0e6] font-bold text-lg rounded-2xl shadow-[4px_4px_0px_#756a5e] flex items-center justify-center gap-2">
+                <span>ROLL NOW</span>
+                <span id="icon-play-arrow"></span>
+              </button>
+
+              <button id="btn-daily-challenge" class="sketch-btn w-full py-2.5 px-4 bg-[#fef3c7] hover:bg-[#fde68a] text-[#92400e] font-bold text-xs sm:text-sm rounded-xl border-2 border-[#d97706] shadow-[3px_3px_0px_#d97706]/40 flex items-center justify-center gap-2">
+                <span id="icon-daily-btn"></span>
+                <span>DAILY CHALLENGE: <strong id="menu-daily-title">SUPER SPEEDWAY</strong></span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Secondary Menu Hub Grid (All Functional Screens) -->
+          <div class="w-full max-w-lg grid grid-cols-4 sm:grid-cols-4 gap-2.5">
+            <button id="hub-shop" class="sketch-btn p-2.5 bg-[#fdfbf7] hover:bg-[#ede5d6] border-2 border-[#2b2723] rounded-xl shadow-[3px_3px_0px_#2b2723]/30 flex flex-col items-center justify-center text-center">
+              <span id="icon-hub-shop" class="mb-1 text-[#2b2723]"></span>
+              <span class="text-[10px] sm:text-xs font-bold uppercase">SHOP</span>
+            </button>
+
+            <button id="hub-garage" class="sketch-btn p-2.5 bg-[#fdfbf7] hover:bg-[#ede5d6] border-2 border-[#2b2723] rounded-xl shadow-[3px_3px_0px_#2b2723]/30 flex flex-col items-center justify-center text-center">
+              <span id="icon-hub-garage" class="mb-1 text-[#2b2723]"></span>
+              <span class="text-[10px] sm:text-xs font-bold uppercase">GARAGE</span>
+            </button>
+
+            <button id="hub-missions" class="sketch-btn p-2.5 bg-[#fdfbf7] hover:bg-[#ede5d6] border-2 border-[#2b2723] rounded-xl shadow-[3px_3px_0px_#2b2723]/30 flex flex-col items-center justify-center text-center">
+              <span id="icon-hub-missions" class="mb-1 text-[#2b2723]"></span>
+              <span class="text-[10px] sm:text-xs font-bold uppercase">MISSIONS</span>
+            </button>
+
+            <button id="hub-worlds" class="sketch-btn p-2.5 bg-[#fdfbf7] hover:bg-[#ede5d6] border-2 border-[#2b2723] rounded-xl shadow-[3px_3px_0px_#2b2723]/30 flex flex-col items-center justify-center text-center">
+              <span id="icon-hub-worlds" class="mb-1 text-[#2b2723]"></span>
+              <span class="text-[10px] sm:text-xs font-bold uppercase">WORLDS</span>
+            </button>
+
+            <button id="hub-achievements" class="sketch-btn p-2.5 bg-[#fdfbf7] hover:bg-[#ede5d6] border-2 border-[#2b2723] rounded-xl shadow-[3px_3px_0px_#2b2723]/30 flex flex-col items-center justify-center text-center">
+              <span id="icon-hub-achieve" class="mb-1 text-[#2b2723]"></span>
+              <span class="text-[10px] sm:text-xs font-bold uppercase">BADGES</span>
+            </button>
+
+            <button id="hub-profile" class="sketch-btn p-2.5 bg-[#fdfbf7] hover:bg-[#ede5d6] border-2 border-[#2b2723] rounded-xl shadow-[3px_3px_0px_#2b2723]/30 flex flex-col items-center justify-center text-center">
+              <span id="icon-hub-profile" class="mb-1 text-[#2b2723]"></span>
+              <span class="text-[10px] sm:text-xs font-bold uppercase">PROFILE</span>
+            </button>
+
+            <button id="hub-leaderboard" class="sketch-btn p-2.5 bg-[#fdfbf7] hover:bg-[#ede5d6] border-2 border-[#2b2723] rounded-xl shadow-[3px_3px_0px_#2b2723]/30 flex flex-col items-center justify-center text-center">
+              <span id="icon-hub-ranks" class="mb-1 text-[#2b2723]"></span>
+              <span class="text-[10px] sm:text-xs font-bold uppercase">RANKS</span>
+            </button>
+
+            <button id="hub-settings" class="sketch-btn p-2.5 bg-[#fdfbf7] hover:bg-[#ede5d6] border-2 border-[#2b2723] rounded-xl shadow-[3px_3px_0px_#2b2723]/30 flex flex-col items-center justify-center text-center">
+              <span id="icon-hub-settings" class="mb-1 text-[#2b2723]"></span>
+              <span class="text-[10px] sm:text-xs font-bold uppercase">SETTINGS</span>
+            </button>
+          </div>
+
+          <!-- Bottom Sound Toggle, Rules & Install Button -->
+          <div class="flex flex-wrap items-center justify-center gap-2.5 mt-4">
+            <button id="btn-sound-toggle" class="text-xs font-bold uppercase tracking-wider text-[#574f45] hover:text-[#221f1d] flex items-center gap-1.5 py-1 px-3 rounded-lg border border-[#2b2723]/25 bg-[#f4ede2]">
+              <span id="sound-icon"></span>
+              <span id="sound-text">SOUND: ON</span>
+            </button>
+
+            <button id="btn-how-to-play" class="text-xs font-bold uppercase tracking-wider text-[#574f45] hover:text-[#221f1d] py-1 px-3 rounded-lg border border-[#2b2723]/25 bg-[#f4ede2]">
+              RULES
+            </button>
+
+            <button id="btn-pwa-install" class="hidden text-xs font-bold uppercase tracking-wider text-[#221f1d] hover:bg-[#ebdcc8] flex items-center gap-1.5 py-1 px-3 rounded-lg border-2 border-[#2b2723] bg-[#fdfbf7] shadow-[2px_2px_0px_#2b2723]/30">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              <span>INSTALL</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- MODAL: SHOP -->
+      <div id="modal-shop" class="absolute inset-0 z-40 hidden flex items-center justify-center p-3 sm:p-5 bg-[#2b2723]/60 backdrop-blur-sm">
+        <div class="sketch-card w-full max-w-2xl bg-[#fdfbf7] border-3 border-[#2b2723] rounded-3xl p-5 sm:p-6 shadow-[8px_8px_0px_#1a1918] flex flex-col max-h-[92vh] overflow-hidden">
+          <div class="flex justify-between items-center pb-3 border-b-2 border-[#2b2723]/20">
+            <div class="flex items-center gap-2">
+              <span id="icon-shop-header" class="text-[#2b2723]"></span>
+              <h2 class="font-sketch text-2xl sm:text-3xl font-black text-[#221f1d]">ARTIST WORKSPACE SHOP</h2>
+            </div>
+            <button class="btn-close-modal w-8 h-8 rounded-lg border-2 border-[#2b2723] flex items-center justify-center font-bold hover:bg-[#ede5d6]" data-target="modal-shop">
+              <span class="icon-close"></span>
+            </button>
+          </div>
+
+          <!-- Category Tabs -->
+          <div class="flex items-center gap-2 py-3 border-b border-[#2b2723]/15 overflow-x-auto">
+            <button class="shop-tab active px-3.5 py-1.5 rounded-xl border-2 border-[#2b2723] bg-[#2b2723] text-[#f5f0e6] font-bold text-xs" data-cat="BALL">BALLS</button>
+            <button class="shop-tab px-3.5 py-1.5 rounded-xl border-2 border-[#2b2723]/30 bg-[#f4ece0] text-[#2b2723] font-bold text-xs" data-cat="TRAIL">TRAILS</button>
+            <button class="shop-tab px-3.5 py-1.5 rounded-xl border-2 border-[#2b2723]/30 bg-[#f4ece0] text-[#2b2723] font-bold text-xs" data-cat="PENCIL">PENCILS</button>
+            <button class="shop-tab px-3.5 py-1.5 rounded-xl border-2 border-[#2b2723]/30 bg-[#f4ece0] text-[#2b2723] font-bold text-xs" data-cat="WORLD">WORLDS</button>
+          </div>
+
+          <!-- Items Grid -->
+          <div id="shop-items-grid" class="flex-1 overflow-y-auto py-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <!-- Rendered dynamically -->
+          </div>
+        </div>
+      </div>
+
+      <!-- MODAL: GARAGE / LOADOUT -->
+      <div id="modal-garage" class="absolute inset-0 z-40 hidden flex items-center justify-center p-3 sm:p-5 bg-[#2b2723]/60 backdrop-blur-sm">
+        <div class="sketch-card w-full max-w-lg bg-[#fdfbf7] border-3 border-[#2b2723] rounded-3xl p-5 sm:p-6 shadow-[8px_8px_0px_#1a1918] flex flex-col max-h-[92vh] overflow-y-auto">
+          <div class="flex justify-between items-center pb-3 border-b-2 border-[#2b2723]/20 mb-4">
+            <h2 class="font-sketch text-2xl sm:text-3xl font-black text-[#221f1d]">LOADOUT & GARAGE</h2>
+            <button class="btn-close-modal w-8 h-8 rounded-lg border-2 border-[#2b2723] flex items-center justify-center font-bold hover:bg-[#ede5d6]" data-target="modal-garage">
+              <span class="icon-close"></span>
+            </button>
+          </div>
+
+          <div class="space-y-3.5 text-left">
+            <div class="p-3 bg-[#f5ede0] rounded-2xl border-2 border-[#2b2723]/30 flex items-center justify-between">
+              <div>
+                <span class="text-[10px] font-bold uppercase tracking-wider text-[#756a5e]">Equipped Ball</span>
+                <div id="garage-ball-name" class="text-base font-black text-[#221f1d]">Classic Parchment</div>
+              </div>
+              <button class="btn-goto-shop-cat px-3 py-1 bg-[#2b2723] text-[#f5f0e6] rounded-xl text-xs font-bold" data-cat="BALL">CHANGE</button>
+            </div>
+
+            <div class="p-3 bg-[#f5ede0] rounded-2xl border-2 border-[#2b2723]/30 flex items-center justify-between">
+              <div>
+                <span class="text-[10px] font-bold uppercase tracking-wider text-[#756a5e]">Equipped Pencil</span>
+                <div id="garage-pencil-name" class="text-base font-black text-[#221f1d]">Classic HB No. 2</div>
+              </div>
+              <button class="btn-goto-shop-cat px-3 py-1 bg-[#2b2723] text-[#f5f0e6] rounded-xl text-xs font-bold" data-cat="PENCIL">CHANGE</button>
+            </div>
+
+            <div class="p-3 bg-[#f5ede0] rounded-2xl border-2 border-[#2b2723]/30 flex items-center justify-between">
+              <div>
+                <span class="text-[10px] font-bold uppercase tracking-wider text-[#756a5e]">Equipped Trail</span>
+                <div id="garage-trail-name" class="text-base font-black text-[#221f1d]">Graphite Dust</div>
+              </div>
+              <button class="btn-goto-shop-cat px-3 py-1 bg-[#2b2723] text-[#f5f0e6] rounded-xl text-xs font-bold" data-cat="TRAIL">CHANGE</button>
+            </div>
+
+            <div class="p-3 bg-[#f5ede0] rounded-2xl border-2 border-[#2b2723]/30 flex items-center justify-between">
+              <div>
+                <span class="text-[10px] font-bold uppercase tracking-wider text-[#756a5e]">Equipped World</span>
+                <div id="garage-world-name" class="text-base font-black text-[#221f1d]">Parchment Studio</div>
+              </div>
+              <button class="btn-goto-shop-cat px-3 py-1 bg-[#2b2723] text-[#f5f0e6] rounded-xl text-xs font-bold" data-cat="WORLD">CHANGE</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- MODAL: MISSIONS -->
+      <div id="modal-missions" class="absolute inset-0 z-40 hidden flex items-center justify-center p-3 sm:p-5 bg-[#2b2723]/60 backdrop-blur-sm">
+        <div class="sketch-card w-full max-w-lg bg-[#fdfbf7] border-3 border-[#2b2723] rounded-3xl p-5 sm:p-6 shadow-[8px_8px_0px_#1a1918] flex flex-col max-h-[92vh] overflow-hidden">
+          <div class="flex justify-between items-center pb-3 border-b-2 border-[#2b2723]/20">
+            <h2 class="font-sketch text-2xl sm:text-3xl font-black text-[#221f1d]">DAILY & LIFETIME MISSIONS</h2>
+            <button class="btn-close-modal w-8 h-8 rounded-lg border-2 border-[#2b2723] flex items-center justify-center font-bold hover:bg-[#ede5d6]" data-target="modal-missions">
+              <span class="icon-close"></span>
+            </button>
+          </div>
+          <div id="missions-list" class="flex-1 overflow-y-auto py-3 space-y-3">
+            <!-- Rendered dynamically -->
+          </div>
+        </div>
+      </div>
+
+      <!-- MODAL: DAILY CHALLENGE -->
+      <div id="modal-daily" class="absolute inset-0 z-40 hidden flex items-center justify-center p-3 sm:p-5 bg-[#2b2723]/60 backdrop-blur-sm">
+        <div class="sketch-card w-full max-w-md bg-[#fdfbf7] border-3 border-[#2b2723] rounded-3xl p-6 shadow-[8px_8px_0px_#1a1918] flex flex-col text-center">
+          <div class="flex justify-between items-center pb-2 border-b-2 border-[#2b2723]/20 mb-4">
+            <h2 class="font-sketch text-2xl sm:text-3xl font-black text-[#221f1d]">TODAY'S CHALLENGE</h2>
+            <button class="btn-close-modal w-8 h-8 rounded-lg border-2 border-[#2b2723] flex items-center justify-center font-bold hover:bg-[#ede5d6]" data-target="modal-daily">
+              <span class="icon-close"></span>
+            </button>
+          </div>
+
+          <div class="p-4 bg-[#fef3c7] rounded-2xl border-2 border-[#d97706] mb-4 text-left">
+            <div class="text-[10px] font-black uppercase text-[#b45309] tracking-wider mb-1">Global Modifier</div>
+            <h3 id="daily-mod-name" class="text-xl font-black text-[#78350f]">SUPER SPEEDWAY</h3>
+            <p id="daily-mod-desc" class="text-xs text-[#92400e] mt-1">1.25x speed with wide sweeping curves. Reach the farthest distance possible!</p>
+          </div>
+
+          <div class="flex justify-around items-center p-3 bg-[#f5ede0] rounded-2xl border border-[#2b2723]/30 mb-6 text-xs">
+            <div>
+              <span class="text-[10px] uppercase font-bold text-[#756a5e]">Daily Streak</span>
+              <div id="daily-streak-count" class="text-xl font-black text-[#221f1d]">0 Days</div>
+            </div>
+            <div>
+              <span class="text-[10px] uppercase font-bold text-[#756a5e]">Today's Best</span>
+              <div id="daily-best-dist" class="text-xl font-black text-[#221f1d]">0 m</div>
+            </div>
+          </div>
+
+          <button id="btn-start-daily" class="sketch-btn w-full py-3.5 bg-[#2b2723] hover:bg-[#3d3833] text-[#f5f0e6] font-bold text-base rounded-2xl shadow-[4px_4px_0px_#756a5e]">
+            PLAY DAILY CHALLENGE
+          </button>
+        </div>
+      </div>
+
+      <!-- MODAL: WORLDS -->
+      <div id="modal-worlds" class="absolute inset-0 z-40 hidden flex items-center justify-center p-3 sm:p-5 bg-[#2b2723]/60 backdrop-blur-sm">
+        <div class="sketch-card w-full max-w-xl bg-[#fdfbf7] border-3 border-[#2b2723] rounded-3xl p-5 sm:p-6 shadow-[8px_8px_0px_#1a1918] flex flex-col max-h-[92vh] overflow-hidden">
+          <div class="flex justify-between items-center pb-3 border-b-2 border-[#2b2723]/20">
+            <h2 class="font-sketch text-2xl sm:text-3xl font-black text-[#221f1d]">SKETCHBOOK WORLDS</h2>
+            <button class="btn-close-modal w-8 h-8 rounded-lg border-2 border-[#2b2723] flex items-center justify-center font-bold hover:bg-[#ede5d6]" data-target="modal-worlds">
+              <span class="icon-close"></span>
+            </button>
+          </div>
+          <div id="worlds-grid" class="flex-1 overflow-y-auto py-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <!-- Rendered dynamically -->
+          </div>
+        </div>
+      </div>
+
+      <!-- MODAL: ACHIEVEMENTS -->
+      <div id="modal-achievements" class="absolute inset-0 z-40 hidden flex items-center justify-center p-3 sm:p-5 bg-[#2b2723]/60 backdrop-blur-sm">
+        <div class="sketch-card w-full max-w-2xl bg-[#fdfbf7] border-3 border-[#2b2723] rounded-3xl p-5 sm:p-6 shadow-[8px_8px_0px_#1a1918] flex flex-col max-h-[92vh] overflow-hidden">
+          <div class="flex justify-between items-center pb-3 border-b-2 border-[#2b2723]/20">
+            <div>
+              <h2 class="font-sketch text-2xl sm:text-3xl font-black text-[#221f1d]">ACHIEVEMENT BADGES</h2>
+              <span id="achieve-count-text" class="text-xs text-[#756a5e] font-semibold">0 / 30 Completed</span>
+            </div>
+            <button class="btn-close-modal w-8 h-8 rounded-lg border-2 border-[#2b2723] flex items-center justify-center font-bold hover:bg-[#ede5d6]" data-target="modal-achievements">
+              <span class="icon-close"></span>
+            </button>
+          </div>
+          <div id="achievements-list" class="flex-1 overflow-y-auto py-3 space-y-2.5">
+            <!-- Rendered dynamically -->
+          </div>
+        </div>
+      </div>
+
+      <!-- MODAL: PROFILE & STATS -->
+      <div id="modal-profile" class="absolute inset-0 z-40 hidden flex items-center justify-center p-3 sm:p-5 bg-[#2b2723]/60 backdrop-blur-sm">
+        <div class="sketch-card w-full max-w-lg bg-[#fdfbf7] border-3 border-[#2b2723] rounded-3xl p-5 sm:p-6 shadow-[8px_8px_0px_#1a1918] flex flex-col max-h-[92vh] overflow-y-auto">
+          <div class="flex justify-between items-center pb-3 border-b-2 border-[#2b2723]/20 mb-4">
+            <h2 class="font-sketch text-2xl sm:text-3xl font-black text-[#221f1d]">DRAFTSMAN PROFILE</h2>
+            <button class="btn-close-modal w-8 h-8 rounded-lg border-2 border-[#2b2723] flex items-center justify-center font-bold hover:bg-[#ede5d6]" data-target="modal-profile">
+              <span class="icon-close"></span>
+            </button>
+          </div>
+
+          <div id="profile-stats-grid" class="grid grid-cols-2 gap-2.5 text-left text-xs mb-4">
+            <!-- Rendered dynamically -->
+          </div>
+        </div>
+      </div>
+
+      <!-- MODAL: LEADERBOARD -->
+      <div id="modal-leaderboard" class="absolute inset-0 z-40 hidden flex items-center justify-center p-3 sm:p-5 bg-[#2b2723]/60 backdrop-blur-sm">
+        <div class="sketch-card w-full max-w-md bg-[#fdfbf7] border-3 border-[#2b2723] rounded-3xl p-5 sm:p-6 shadow-[8px_8px_0px_#1a1918] flex flex-col max-h-[92vh] overflow-hidden">
+          <div class="flex justify-between items-center pb-3 border-b-2 border-[#2b2723]/20">
+            <h2 class="font-sketch text-2xl sm:text-3xl font-black text-[#221f1d]">LOCAL HIGH SCORES</h2>
+            <button class="btn-close-modal w-8 h-8 rounded-lg border-2 border-[#2b2723] flex items-center justify-center font-bold hover:bg-[#ede5d6]" data-target="modal-leaderboard">
+              <span class="icon-close"></span>
+            </button>
+          </div>
+          <div id="leaderboard-list" class="flex-1 overflow-y-auto py-3 space-y-2 text-left">
+            <!-- Rendered dynamically -->
+          </div>
+        </div>
+      </div>
+
+      <!-- MODAL: SETTINGS -->
+      <div id="modal-settings" class="absolute inset-0 z-40 hidden flex items-center justify-center p-3 sm:p-5 bg-[#2b2723]/60 backdrop-blur-sm">
+        <div class="sketch-card w-full max-w-md bg-[#fdfbf7] border-3 border-[#2b2723] rounded-3xl p-5 sm:p-6 shadow-[8px_8px_0px_#1a1918] flex flex-col max-h-[92vh] overflow-y-auto">
+          <div class="flex justify-between items-center pb-3 border-b-2 border-[#2b2723]/20 mb-4">
+            <h2 class="font-sketch text-2xl sm:text-3xl font-black text-[#221f1d]">GAME SETTINGS</h2>
+            <button class="btn-close-modal w-8 h-8 rounded-lg border-2 border-[#2b2723] flex items-center justify-center font-bold hover:bg-[#ede5d6]" data-target="modal-settings">
+              <span class="icon-close"></span>
+            </button>
+          </div>
+
+          <div class="space-y-4 text-left text-sm text-[#2b2723]">
+            <!-- Steering Sensitivity Slider -->
+            <div class="p-3 bg-[#f5ede0] rounded-2xl border border-[#2b2723]/30">
+              <div class="flex justify-between font-bold text-xs uppercase mb-1">
+                <span>Steering Sensitivity</span>
+                <span id="label-sensitivity">1.0x</span>
+              </div>
+              <input type="range" id="setting-sensitivity" min="0.5" max="2.0" step="0.1" value="1.0" class="w-full accent-[#2b2723]">
+            </div>
+
+            <!-- Auto-Steer Assist Toggle -->
+            <div class="p-3 bg-[#f5ede0] rounded-2xl border border-[#2b2723]/30 flex justify-between items-center">
+              <div>
+                <div class="font-bold text-xs uppercase">Auto-Steer Soft Assist</div>
+                <div class="text-[11px] text-[#756a5e]">Gentle centering force toward road centerline</div>
+              </div>
+              <input type="checkbox" id="setting-autosteer" class="w-5 h-5 accent-[#2b2723]">
+            </div>
+
+            <!-- Sound Toggle -->
+            <div class="p-3 bg-[#f5ede0] rounded-2xl border border-[#2b2723]/30 flex justify-between items-center">
+              <div>
+                <div class="font-bold text-xs uppercase">Sound Effects & Ambience</div>
+                <div class="text-[11px] text-[#756a5e]">Procedural paper scratching & rolling hum</div>
+              </div>
+              <input type="checkbox" id="setting-sound" checked class="w-5 h-5 accent-[#2b2723]">
+            </div>
+
+            <!-- Graphics Quality -->
+            <div class="p-3 bg-[#f5ede0] rounded-2xl border border-[#2b2723]/30">
+              <div class="font-bold text-xs uppercase mb-2">Visual Fidelity</div>
+              <div class="flex gap-2">
+                <button class="setting-quality-btn flex-1 py-1.5 rounded-xl border border-[#2b2723] font-bold text-xs" data-quality="LOW">LOW</button>
+                <button class="setting-quality-btn flex-1 py-1.5 rounded-xl border border-[#2b2723] font-bold text-xs" data-quality="MEDIUM">MED</button>
+                <button class="setting-quality-btn flex-1 py-1.5 rounded-xl border border-[#2b2723] bg-[#2b2723] text-[#fdfbf7] font-bold text-xs" data-quality="HIGH">HIGH</button>
+              </div>
+            </div>
+
+            <!-- Camera Shake -->
+            <div class="p-3 bg-[#f5ede0] rounded-2xl border border-[#2b2723]/30 flex justify-between items-center">
+              <div>
+                <div class="font-bold text-xs uppercase">Camera Impact Shake</div>
+                <div class="text-[11px] text-[#756a5e]">Trauma vibration during crashes & speedups</div>
+              </div>
+              <input type="checkbox" id="setting-shake" checked class="w-5 h-5 accent-[#2b2723]">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- MODAL: HOW TO PLAY -->
+      <div id="modal-how" class="absolute inset-0 z-40 hidden flex items-center justify-center p-3 sm:p-5 bg-[#2b2723]/60 backdrop-blur-sm">
+        <div class="sketch-card w-full max-w-md bg-[#fdfbf7] border-3 border-[#2b2723] rounded-3xl p-6 shadow-[8px_8px_0px_#1a1918] flex flex-col text-left max-h-[92vh] overflow-y-auto">
+          <div class="flex justify-between items-center mb-4 border-b-2 border-[#2b2723]/20 pb-3">
+            <h2 class="font-sketch text-2xl sm:text-3xl font-black text-[#221f1d]">RULES OF THE FLOW</h2>
+            <button class="btn-close-modal w-8 h-8 rounded-lg border-2 border-[#2b2723] flex items-center justify-center font-bold hover:bg-[#ede5d6]" data-target="modal-how">
+              <span class="icon-close"></span>
+            </button>
+          </div>
+
+          <div class="space-y-3 text-xs sm:text-sm text-[#3d3833]">
+            <div class="p-2.5 rounded-xl bg-[#f5ede0] border border-[#2b2723]/20">
+              <strong class="text-[#221f1d] block font-bold mb-0.5">The ball rolls automatically.</strong>
+              Flows smoothly through a procedurally curving 3D track.
+            </div>
+
+            <div class="p-2.5 rounded-xl bg-[#f5ede0] border border-[#2b2723]/20">
+              <strong class="text-[#221f1d] block font-bold mb-0.5">Swipe Left & Right to steer.</strong>
+              Flick effortlessly across lanes on touchscreen or use A / D keys on desktop.
+            </div>
+
+            <div class="p-2.5 rounded-xl bg-[#f5ede0] border border-[#2b2723]/20">
+              <strong class="text-[#221f1d] block font-bold mb-0.5">The pencil physically sketches your road!</strong>
+              Watch the graphite tip draw ahead in real time, sketching upcoming turns, ramps, and hazards!
+            </div>
+
+            <div class="p-2.5 rounded-xl bg-[#f5ede0] border border-[#2b2723]/20">
+              <strong class="text-[#221f1d] block font-bold mb-0.5">Dodge 20 stationery hazards.</strong>
+              Avoid sharp pencil sharpeners, heavy rubber erasers, ink blots, drafting compasses, and blades.
+            </div>
+
+            <div class="p-2.5 rounded-xl bg-[#f5ede0] border border-[#2b2723]/20">
+              <strong class="text-[#221f1d] block font-bold mb-0.5">Jump effortlessly at any speed!</strong>
+              Tap anywhere on screen, swipe up, tap with a second finger while steering, or hit the large JUMP button. On desktop, press Space bar or W.
+            </div>
+
+            <div class="p-2.5 rounded-xl bg-[#fef3c7] border border-[#d97706]/40">
+              <strong class="text-[#92400e] block font-bold mb-0.5">Collect Graphite & 2B Lead Boosts!</strong>
+              Grab graphite shards along the road to unlock items in the Shop and supercharge your speed.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- PAUSE OVERLAY -->
+      <div id="screen-pause" class="absolute inset-0 z-40 hidden flex items-center justify-center p-4 bg-[#2b2723]/50 backdrop-blur-sm">
+        <div class="sketch-card w-full max-w-sm bg-[#fdfbf7] border-3 border-[#2b2723] rounded-3xl p-6 sm:p-7 shadow-[8px_8px_0px_#1a1918] flex flex-col items-center text-center">
+          <h2 class="font-sketch text-3xl font-black text-[#221f1d] mb-1">GAME PAUSED</h2>
+          <p class="text-xs text-[#726a61] mb-6">Take a breath. The pencil is poised.</p>
+
+          <div class="flex flex-col gap-2.5 w-full">
+            <button id="btn-resume" class="sketch-btn w-full py-3 bg-[#2b2723] text-[#f5f0e6] font-bold rounded-2xl shadow-[3px_3px_0px_#756a5e] flex items-center justify-center gap-2">
+              <span id="icon-resume"></span>
+              <span>RESUME</span>
+            </button>
+            <button id="btn-pause-restart" class="sketch-btn w-full py-2.5 bg-[#fdfbf7] text-[#2b2723] font-bold rounded-2xl border-2 border-[#2b2723] shadow-[3px_3px_0px_#2b2723]">
+              RESTART RUN
+            </button>
+            <button id="btn-pause-menu" class="sketch-btn w-full py-2.5 bg-[#fdfbf7] text-[#726a61] font-bold rounded-2xl border-2 border-[#726a61]/40">
+              MAIN MENU
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- GAME OVER SCREEN 2.0 -->
+      <div id="screen-game-over" class="absolute inset-0 z-40 hidden flex items-center justify-center p-3 sm:p-5 bg-[#2b2723]/60 backdrop-blur-sm">
+        <div class="sketch-card w-full max-w-md bg-[#fdfbf7] border-3 border-[#2b2723] rounded-3xl p-6 shadow-[8px_8px_0px_#1a1918] flex flex-col items-center text-center relative overflow-hidden animate-pop">
+          <!-- Crash banner -->
+          <div id="game-over-reason" class="text-xs uppercase tracking-wide text-[#b91c1c] font-black mb-3 px-3 py-1.5 rounded-xl bg-[#fee2e2] border border-[#ef4444]/50 shadow-sm max-w-full text-center">
+            CRASHED INTO HAZARD
+          </div>
+
+          <h2 class="font-sketch text-4xl sm:text-5xl font-black text-[#221f1d] mb-4">
+            RUN COMPLETE
+          </h2>
+
+          <!-- Stats Grid -->
+          <div class="w-full grid grid-cols-2 gap-2.5 mb-3 text-left">
+            <div class="p-3 bg-[#f5ede0] rounded-2xl border-2 border-[#2b2723]/30">
+              <div class="text-[10px] uppercase font-bold text-[#756a5e]">Distance</div>
+              <div id="go-distance" class="text-2xl font-black text-[#221f1d]">0 m</div>
+            </div>
+            <div class="p-3 bg-[#f5ede0] rounded-2xl border-2 border-[#2b2723]/30">
+              <div class="text-[10px] uppercase font-bold text-[#756a5e]">Final Score</div>
+              <div id="go-score" class="text-2xl font-black text-[#221f1d]">0</div>
+            </div>
+          </div>
+
+          <!-- Rewards Summary Pill -->
+          <div class="w-full p-2.5 bg-[#f4ece0] rounded-2xl border border-[#2b2723]/30 flex items-center justify-around mb-4 text-xs font-bold text-[#2b2723]">
+            <div class="flex items-center gap-1.5">
+              <span id="icon-go-graphite"></span>
+              <span id="go-reward-graphite">+0</span>
+            </div>
+            <div class="flex items-center gap-1.5 text-[#b45309]">
+              <span id="icon-go-lead"></span>
+              <span id="go-reward-leads">+0</span>
+            </div>
+            <div class="flex items-center gap-1">
+              <span>XP:</span>
+              <span id="go-reward-xp">+0</span>
+            </div>
+          </div>
+
+          <!-- New Record Badge -->
+          <div id="go-new-best" class="hidden mb-4 w-full py-1.5 px-3 bg-[#fef3c7] border-2 border-[#ca8a04] text-[#854d0e] rounded-xl font-bold text-xs flex items-center justify-center gap-2">
+            <span>NEW PERSONAL BEST RECORD!</span>
+          </div>
+
+          <div class="flex flex-col gap-2.5 w-full">
+            <button id="btn-retry" class="sketch-btn w-full py-3.5 bg-[#2b2723] hover:bg-[#3d3833] text-[#f5f0e6] font-bold text-base rounded-2xl shadow-[4px_4px_0px_#756a5e] flex items-center justify-center gap-2">
+              <span id="icon-retry"></span>
+              <span>ROLL AGAIN</span>
+            </button>
+            <div class="flex gap-2 w-full">
+              <button id="btn-go-share" class="sketch-btn flex-1 py-2.5 bg-[#f4ece0] hover:bg-[#ebdcc8] text-[#2b2723] font-bold rounded-2xl border-2 border-[#2b2723] shadow-[3px_3px_0px_#2b2723] flex items-center justify-center gap-1.5 text-xs sm:text-sm">
+                <span id="icon-go-share"></span>
+                <span>SHARE</span>
+              </button>
+              <button id="btn-go-menu" class="sketch-btn flex-1 py-2.5 bg-[#fdfbf7] hover:bg-[#ede5d6] text-[#2b2723] font-bold rounded-2xl border-2 border-[#2b2723] shadow-[3px_3px_0px_#2b2723] text-xs sm:text-sm">
+                MAIN MENU
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Offline Connectivity Status Badge (Non-intrusive bottom corner) -->
+    <div id="offline-indicator" class="fixed bottom-4 left-4 z-50 hidden flex items-center gap-2 rounded-xl bg-[#2b2723] border border-[#f5f0e6]/30 px-3 py-1.5 text-xs font-bold text-[#f5f0e6] shadow-xl pointer-events-none transition-all duration-300">
+      <span class="h-2 w-2 rounded-full bg-[#dfab34] animate-pulse"></span>
+      <span>Offline Mode — All Progress Saved</span>
+    </div>
+
+    <!-- iOS Install Guide Modal -->
+    <div id="modal-ios-install" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div class="sketch-card w-full max-w-sm bg-[#fdfbf7] border-3 border-[#2b2723] rounded-2xl p-5 shadow-[6px_6px_0px_#2b2723] text-left">
+        <h3 class="font-sketch text-lg font-black text-[#221f1d] mb-2">Install Pencil Flow on iOS</h3>
+        <p class="text-xs text-[#574f45] leading-relaxed mb-4">
+          1. Tap the <strong class="text-[#221f1d]">Share</strong> button in Safari's toolbar.<br />
+          2. Scroll down and tap <strong class="text-[#221f1d]">Add to Home Screen</strong>.<br />
+          3. Tap <strong class="text-[#221f1d]">Add</strong> in the top-right corner to play full screen!
+        </p>
+        <button id="btn-close-ios-guide" class="sketch-btn w-full py-2 bg-[#2b2723] text-[#fdfbf7] font-bold text-xs rounded-xl uppercase tracking-wider">
+          Got It
+        </button>
+      </div>
+    </div>
+
+    <!-- Main Game Script -->
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
