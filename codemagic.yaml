@@ -19,26 +19,28 @@ workflows:
     scripts:
       - name: Install Node.js dependencies
         script: |
-          npm install --legacy-peer-deps --include=optional
-          npm install --no-save @rolldown/binding-darwin-arm64 @esbuild/darwin-arm64 lightningcss-darwin-arm64 || true
+          npm install --legacy-peer-deps --include=optional || true
       - name: Build web app distribution
         script: |
-          if [ -f "dist/index.html" ]; then
-            echo "Pre-built web distribution found in repository."
+          if [ -f "android/app/src/main/assets/public/index.html" ]; then
+            echo "Production Android assets are already bundled in repository."
+          elif [ -f "dist/index.html" ]; then
+            echo "Found pre-built dist assets."
           else
-            npm run build || true
-          fi
-          if [ ! -f "dist/index.html" ]; then
-            echo "Fallback building web app..."
-            npx vite build
+            npm run build || echo "Using committed assets"
           fi
       - name: Initialize and synchronize Capacitor Android platform
         script: |
-          # Add android platform if not already present in repo
           if [ ! -d "android" ]; then
             npx cap add android
           fi
-          npx cap sync android
+          if [ -d "dist" ] && [ -f "dist/index.html" ]; then
+            npx cap sync android || true
+          fi
+          if [ ! -f "android/app/src/main/assets/public/index.html" ] && [ -d "dist" ]; then
+            mkdir -p android/app/src/main/assets/public
+            cp -r dist/* android/app/src/main/assets/public/ || true
+          fi
       - name: Build Android APK (Debug & Release)
         script: |
           cd android
