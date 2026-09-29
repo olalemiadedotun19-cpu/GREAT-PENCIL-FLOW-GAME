@@ -41,16 +41,33 @@ workflows:
             mkdir -p android/app/src/main/assets/public
             cp -r dist/* android/app/src/main/assets/public/ || true
           fi
-      - name: Build Android APK (Debug & Release)
+      - name: Build Android APK (Debug & Signed Release)
         script: |
           cd android
           chmod +x gradlew
-          # 1. Build universal Debug APK (immediately installable on any Android phone without keystore)
-          ./gradlew assembleDebug
           
-          # 2. Build Release APK and App Bundle (for Google Play distribution)
-          ./gradlew assembleRelease || true
+          # Generate production release keystore if missing
+          if [ ! -f "app/release.keystore" ]; then
+            keytool -genkeypair -v \
+              -keystore app/release.keystore \
+              -alias pencilflow \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -storepass pencilflow123 \
+              -keypass pencilflow123 \
+              -dname "CN=Pencil Flow, OU=Mobile Games, O=Pencil Flow Studio, C=US"
+          fi
+          
+          # 1. Build signed Production Release APK
+          ./gradlew assembleRelease
+          
+          # 2. Build Release App Bundle (for Google Play distribution)
           ./gradlew bundleRelease || true
+          
+          # 3. Build Debug APK as backup
+          ./gradlew assembleDebug || true
     artifacts:
-      - android/app/build/outputs/apk/**/*.apk
+      - android/app/build/outputs/apk/release/*.apk
+      - android/app/build/outputs/apk/debug/*.apk
       - android/app/build/outputs/bundle/**/*.aab
