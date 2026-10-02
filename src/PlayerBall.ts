@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { CONFIG } from './config';
 import { PathSample, damp, clamp } from './utils';
+import { PencilStyleDefinition } from './PencilStyleSystem';
 
 export interface BallState {
   distance: number;
@@ -184,6 +185,13 @@ export class PlayerBall {
         wireMat.color.setHex(CONFIG.visual.graphiteDark);
         eqMat.color.setHex(CONFIG.visual.graphiteDark);
         break;
+    }
+  }
+
+  public applyPencilStyle(style: PencilStyleDefinition): void {
+    if (!style) return;
+    if (this.shadowMesh?.material) {
+      (this.shadowMesh.material as THREE.MeshBasicMaterial).color.setHex(style.primaryColor);
     }
   }
 

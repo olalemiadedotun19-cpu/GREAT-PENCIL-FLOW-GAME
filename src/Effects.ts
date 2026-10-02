@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { CONFIG } from './config';
 import { randomRange } from './utils';
+import { PencilStyleDefinition, PENCIL_STYLES } from './PencilStyleSystem';
 
 interface Particle {
   pos: THREE.Vector3;
@@ -16,6 +17,7 @@ interface Particle {
 
 export class Effects {
   public group: THREE.Group;
+  private currentStyle: PencilStyleDefinition = PENCIL_STYLES['classic_hb'];
 
   // Particle System
   private particleGeo: THREE.BufferGeometry;
@@ -38,6 +40,7 @@ export class Effects {
 
   // Background sketch decorations
   private backgroundDecorations: THREE.Group;
+  private doodleMat!: THREE.LineBasicMaterial;
 
   constructor() {
     this.group = new THREE.Group();
@@ -112,8 +115,8 @@ export class Effects {
   }
 
   private createBackgroundSketches(): void {
-    const doodleMat = new THREE.LineBasicMaterial({
-      color: 0xcdc5b6, // faint pencil mark on paper
+    this.doodleMat = new THREE.LineBasicMaterial({
+      color: this.currentStyle ? this.currentStyle.faintLineColor : 0xcdc5b6,
       transparent: true,
       opacity: 0.4,
       linewidth: 1,
@@ -137,7 +140,7 @@ export class Effects {
         );
       }
       circleGeo.setFromPoints(circlePts);
-      const circleLine = new THREE.Line(circleGeo, doodleMat);
+      const circleLine = new THREE.Line(circleGeo, this.doodleMat);
       circleLine.frustumCulled = false;
       g.add(circleLine);
 
@@ -179,9 +182,21 @@ export class Effects {
         break;
       case 'graphite_dust':
       default:
-        this.trailMat.color.setHex(0x3d352e);
-        this.trailMat.opacity = 0.45;
+        this.trailMat.color.setHex(this.currentStyle ? this.currentStyle.ballTrailColor : 0x3d352e);
+        this.trailMat.opacity = this.currentStyle ? this.currentStyle.ballTrailOpacity : 0.45;
         break;
+    }
+  }
+
+  public applyPencilStyle(style: PencilStyleDefinition): void {
+    if (!style) return;
+    this.currentStyle = style;
+    if (this.currentTrailSkin === 'graphite_dust') {
+      this.trailMat.color.setHex(style.ballTrailColor);
+      this.trailMat.opacity = style.ballTrailOpacity;
+    }
+    if (this.doodleMat) {
+      this.doodleMat.color.setHex(style.faintLineColor);
     }
   }
 
@@ -242,9 +257,14 @@ export class Effects {
             break;
           case 'graphite_dust':
           default:
-            pColor = Math.random() > 0.5
-              ? new THREE.Color(CONFIG.visual.graphiteDark)
-              : new THREE.Color(CONFIG.visual.graphiteMedium);
+            if (this.currentStyle && this.currentStyle.dustColors.length > 0) {
+              const hex = this.currentStyle.dustColors[Math.floor(Math.random() * this.currentStyle.dustColors.length)];
+              pColor = new THREE.Color(hex);
+            } else {
+              pColor = Math.random() > 0.5
+                ? new THREE.Color(CONFIG.visual.graphiteDark)
+                : new THREE.Color(CONFIG.visual.graphiteMedium);
+            }
             break;
         }
       }
@@ -276,8 +296,8 @@ export class Effects {
 
       const isWood = Math.random() > 0.3;
       const col = isWood
-        ? new THREE.Color(isBoosted ? 0xf0b830 : 0xe5a93c)
-        : new THREE.Color(0xebd9b5);
+        ? new THREE.Color(this.currentStyle ? this.currentStyle.shavingColor : (isBoosted ? 0xf0b830 : 0xe5a93c))
+        : new THREE.Color(this.currentStyle ? this.currentStyle.accentColor : 0xebd9b5);
 
       this.particles.push({
         pos: shavingPos,
@@ -320,7 +340,7 @@ export class Effects {
         life: 0,
         maxLife: randomRange(0.6, 1.2),
         size: randomRange(0.25, 0.45),
-        color: new THREE.Color(isGold ? CONFIG.visual.leadGold : CONFIG.visual.graphiteDark),
+        color: new THREE.Color(isGold ? (this.currentStyle ? this.currentStyle.sparksColor : CONFIG.visual.leadGold) : (this.currentStyle ? this.currentStyle.primaryColor : CONFIG.visual.graphiteDark)),
         isShaving: true,
       });
     }
@@ -347,7 +367,7 @@ export class Effects {
         life: 0,
         maxLife: randomRange(0.4, 0.75),
         size: randomRange(0.18, 0.32),
-        color: new THREE.Color(Math.random() > 0.4 ? 0x221f1d : 0x5a534c),
+        color: new THREE.Color(this.currentStyle ? this.currentStyle.collectibleColor : 0x221f1d),
         isShaving: false,
       });
     }
@@ -374,7 +394,7 @@ export class Effects {
         life: 0,
         maxLife: randomRange(0.35, 0.65),
         size: randomRange(0.2, 0.38),
-        color: new THREE.Color(0x3d3833),
+        color: new THREE.Color(this.currentStyle ? this.currentStyle.primaryColor : 0x3d3833),
         isShaving: false,
       });
     }
@@ -405,8 +425,29 @@ export class Effects {
         life: 0,
         maxLife: randomRange(0.3, 0.6),
         size: randomRange(0.12, 0.22),
-        color: new THREE.Color(CONFIG.visual.graphiteDark),
+        color: new THREE.Color(this.currentStyle ? this.currentStyle.primaryColor : CONFIG.visual.graphiteDark),
         isShaving: false,
+      });
+    }
+  }
+
+  public emitGraphiteDustSparks(pos: THREE.Vector3, isShaving = false): void {
+    if (this.particles.length >= this.maxParticles) return;
+    const count = isShaving ? 2 : 1;
+    for (let i = 0; i < count; i++) {
+      const pColor = isShaving
+        ? new THREE.Color(this.currentStyle ? this.currentStyle.shavingColor : 0xead9b6)
+        : new THREE.Color(this.currentStyle ? this.currentStyle.primaryColor : 0x221f1d);
+      this.particles.push({
+        pos: pos.clone().add(new THREE.Vector3((Math.random() - 0.5) * 0.1, Math.random() * 0.08, (Math.random() - 0.5) * 0.1)),
+        vel: new THREE.Vector3((Math.random() - 0.5) * 0.8, Math.random() * 0.8 + 0.2, (Math.random() - 0.5) * 0.8),
+        rot: new THREE.Vector3(),
+        rotVel: new THREE.Vector3((Math.random() - 0.5) * 8, (Math.random() - 0.5) * 8, 0),
+        life: 0,
+        maxLife: randomRange(0.2, 0.5),
+        size: isShaving ? randomRange(0.2, 0.35) : randomRange(0.08, 0.16),
+        color: pColor,
+        isShaving,
       });
     }
   }
@@ -432,9 +473,7 @@ export class Effects {
         life: 0,
         maxLife: randomRange(0.4, 0.75),
         size: randomRange(0.2, 0.4),
-        color: new THREE.Color(
-          Math.random() > 0.5 ? CONFIG.visual.graphiteDark : CONFIG.visual.graphiteMedium
-        ),
+        color: new THREE.Color(this.currentStyle ? this.currentStyle.puffColor : CONFIG.visual.graphiteDark),
         isShaving: Math.random() > 0.6,
       });
     }
@@ -461,10 +500,10 @@ export class Effects {
         size: randomRange(0.22, 0.5),
         color: new THREE.Color(
           Math.random() > 0.6
-            ? CONFIG.visual.graphiteDark
+            ? (this.currentStyle ? this.currentStyle.primaryColor : CONFIG.visual.graphiteDark)
             : Math.random() > 0.5
-            ? CONFIG.visual.pencilBodyColor
-            : CONFIG.visual.eraserColor
+            ? (this.currentStyle ? this.currentStyle.accentColor : CONFIG.visual.pencilBodyColor)
+            : (this.currentStyle ? this.currentStyle.secondaryColor : CONFIG.visual.eraserColor)
         ),
         isShaving: true,
       });

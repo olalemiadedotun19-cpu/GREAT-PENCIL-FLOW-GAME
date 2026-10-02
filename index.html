@@ -155,9 +155,29 @@
             </p>
 
             <!-- Best Record Badge -->
-            <div class="mb-4 px-4 py-1.5 bg-[#f4ece0] rounded-xl border border-[#2b2723]/40 flex items-center gap-3">
+            <div class="mb-3 px-4 py-1.5 bg-[#f4ece0] rounded-xl border border-[#2b2723]/40 flex items-center gap-3">
               <span class="text-[11px] font-bold uppercase tracking-wider text-[#756a5e]">Best Record</span>
               <span id="menu-best-score" class="text-base font-black text-[#221f1d]">0 m</span>
+            </div>
+
+            <!-- WORLD ARTIST STYLE QUICK SWITCHER -->
+            <div id="world-style-picker" class="w-full max-w-sm mb-3.5 p-2 bg-[#f4ede1] hover:bg-[#ede3d3] active:scale-99 transition-all cursor-pointer rounded-2xl border-2 border-[#2b2723] shadow-[3px_3px_0px_#2b2723]/30 flex flex-col items-center select-none group">
+              <div class="text-[9px] uppercase font-black tracking-widest text-[#756a5e] mb-1 flex items-center gap-1.5">
+                <span>WORLD ART DIRECTION</span>
+                <span id="style-swatch" class="w-2.5 h-2.5 rounded-full border border-[#2b2723] inline-block bg-[#d97706]"></span>
+              </div>
+              <div class="flex items-center justify-between w-full px-1">
+                <button id="btn-style-prev" aria-label="Previous Style" class="sketch-btn w-7 h-7 rounded-lg bg-[#fdfbf7] hover:bg-[#2b2723] hover:text-[#fdfbf7] active:scale-90 border border-[#2b2723] flex items-center justify-center font-black text-sm text-[#2b2723]">
+                  ‹
+                </button>
+                <div class="flex flex-col items-center text-center flex-1 px-2 overflow-hidden">
+                  <span id="style-title" class="text-xs sm:text-sm font-black text-[#221f1d] leading-tight truncate w-full">Classic HB No. 2</span>
+                  <span id="style-subtitle" class="text-[9px] text-[#70685e] font-semibold truncate w-full">The Classic Draftsman • Warm Vellum</span>
+                </div>
+                <button id="btn-style-next" aria-label="Next Style" class="sketch-btn w-7 h-7 rounded-lg bg-[#fdfbf7] hover:bg-[#2b2723] hover:text-[#fdfbf7] active:scale-90 border border-[#2b2723] flex items-center justify-center font-black text-sm text-[#2b2723]">
+                  ›
+                </button>
+              </div>
             </div>
 
             <!-- Primary Actions -->
@@ -252,15 +272,35 @@
           </div>
 
           <!-- Category Tabs -->
-          <div class="flex items-center gap-2 py-3 border-b border-[#2b2723]/15 overflow-x-auto">
+          <div class="flex items-center gap-2 py-2.5 border-b border-[#2b2723]/15 overflow-x-auto">
             <button class="shop-tab active px-3.5 py-1.5 rounded-xl border-2 border-[#2b2723] bg-[#2b2723] text-[#f5f0e6] font-bold text-xs" data-cat="BALL">BALLS</button>
             <button class="shop-tab px-3.5 py-1.5 rounded-xl border-2 border-[#2b2723]/30 bg-[#f4ece0] text-[#2b2723] font-bold text-xs" data-cat="TRAIL">TRAILS</button>
             <button class="shop-tab px-3.5 py-1.5 rounded-xl border-2 border-[#2b2723]/30 bg-[#f4ece0] text-[#2b2723] font-bold text-xs" data-cat="PENCIL">PENCILS</button>
             <button class="shop-tab px-3.5 py-1.5 rounded-xl border-2 border-[#2b2723]/30 bg-[#f4ece0] text-[#2b2723] font-bold text-xs" data-cat="WORLD">WORLDS</button>
           </div>
 
+          <!-- Live 3D World & Item Style Preview Box -->
+          <div id="shop-preview-container" class="relative w-full h-36 sm:h-44 bg-[#f2ece1] rounded-2xl border-2 border-[#2b2723]/40 overflow-hidden my-2 shadow-[inset_0px_2px_4px_rgba(0,0,0,0.1)] flex flex-col justify-between">
+            <div id="shop-3d-canvas-wrap" class="absolute inset-0"></div>
+            <!-- Dynamic Style Info Overlay -->
+            <div class="relative z-10 p-2.5 flex justify-between items-start pointer-events-none">
+              <div class="sketch-panel px-2.5 py-1 bg-[#fdfbf7]/95 rounded-xl border border-[#2b2723]/30 text-left">
+                <span id="preview-artist-title" class="text-[9px] uppercase font-bold text-[#b45309] tracking-wider">THE CLASSIC DRAFTSMAN</span>
+                <div id="preview-item-name" class="text-sm font-black text-[#221f1d]">Classic HB No. 2</div>
+              </div>
+              <div id="preview-style-badge" class="sketch-panel px-2.5 py-1 bg-[#fef3c7] text-[#92400e] rounded-lg border border-[#d97706] font-bold text-[10px] uppercase tracking-wider">
+                WORLD STYLE
+              </div>
+            </div>
+            <div class="relative z-10 p-2 text-center pointer-events-none">
+              <span id="preview-style-subtitle" class="text-[10px] font-semibold text-[#5a524a] bg-[#fdfbf7]/85 px-3 py-0.5 rounded-full border border-[#2b2723]/20">
+                Warm Vellum, Graphite Strokes & Natural Paper Tooth
+              </span>
+            </div>
+          </div>
+
           <!-- Items Grid -->
-          <div id="shop-items-grid" class="flex-1 overflow-y-auto py-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div id="shop-items-grid" class="flex-1 overflow-y-auto py-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
             <!-- Rendered dynamically -->
           </div>
         </div>

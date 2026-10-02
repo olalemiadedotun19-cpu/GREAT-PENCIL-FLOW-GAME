@@ -2,6 +2,8 @@ import { GameMode, GameState } from './GameState';
 import { ICONS } from './IconSystem';
 import { SaveSystem, GameSettings } from './SaveSystem';
 import { SHOP_ITEMS, ShopItem } from './ShopCatalogue';
+import { ShopPreview } from './ShopPreview';
+import { PencilStyleDefinition, getAllPencilStyles, getPencilStyle } from './PencilStyleSystem';
 import confetti from 'canvas-confetti';
 
 export interface UICallbacks {
@@ -59,6 +61,7 @@ export class UI {
   // Modals
   private currentShopCat: 'BALL' | 'TRAIL' | 'PENCIL' | 'WORLD' = 'BALL';
   private toastTimeout: number | null = null;
+  private shopPreview: ShopPreview | null = null;
 
   constructor(callbacks: UICallbacks, saveSystem: SaveSystem) {
     this.callbacks = callbacks;
@@ -100,6 +103,9 @@ export class UI {
     this.injectIcons();
     this.bindEvents();
     this.updateProfileDisplay();
+    const equipped = this.saveSystem?.getData()?.equippedPencil;
+    const initStyle = getPencilStyle(equipped);
+    if (initStyle) this.applyPencilStyle(initStyle);
   }
 
   private injectIcons(): void {
@@ -147,6 +153,32 @@ export class UI {
     });
     document.getElementById('btn-sound-toggle')?.addEventListener('click', () => this.callbacks.onToggleSound());
     document.getElementById('btn-how-to-play')?.addEventListener('click', () => this.openModal('modal-how'));
+
+    // World Artist Style Quick Switcher
+    const cycleStyle = (direction: 1 | -1) => {
+      const styles = getAllPencilStyles();
+      const currentId = this.saveSystem.getData().equippedPencil;
+      let currentIndex = styles.findIndex((s) => s.id === currentId);
+      if (currentIndex === -1) currentIndex = 0;
+      const nextIndex = (currentIndex + direction + styles.length) % styles.length;
+      const nextStyle = styles[nextIndex];
+      this.saveSystem.getData().equippedPencil = nextStyle.id;
+      this.saveSystem.save();
+      this.callbacks.onEquipCosmetic('PENCIL', nextStyle.id);
+      this.showToast(`${nextStyle.name}: ${nextStyle.artistTitle}`);
+    };
+
+    document.getElementById('btn-style-prev')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      cycleStyle(-1);
+    });
+    document.getElementById('btn-style-next')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      cycleStyle(1);
+    });
+    document.getElementById('world-style-picker')?.addEventListener('click', () => {
+      cycleStyle(1);
+    });
 
     // Hub buttons
     document.getElementById('hub-shop')?.addEventListener('click', () => {
@@ -349,6 +381,12 @@ export class UI {
       const priceIcon = item.priceType === 'GRAPHITE' ? ICONS.GRAPHITE : ICONS.LEAD;
       const priceText = item.price === 0 ? 'FREE' : `${item.price}`;
 
+      const pencilStyle = item.category === 'PENCIL' ? getPencilStyle(item.id) : null;
+      const artistBadge = pencilStyle
+        ? `<div class="text-[9px] font-black text-[#b45309] bg-[#fef3c7] px-2 py-0.5 rounded-md uppercase tracking-wider mb-1 inline-block">${pencilStyle.artistTitle}</div>`
+        : '';
+      const subtitleDesc = pencilStyle ? `<div class="text-[10px] font-semibold text-[#8c8274] mb-1">${pencilStyle.subtitle}</div>` : '';
+
       card.innerHTML = `
         <div>
           <div class="flex items-center justify-between mb-1.5">
@@ -359,7 +397,9 @@ export class UI {
             }">${item.rarity}</span>
             <div class="w-4 h-4 rounded-full border border-[#2b2723]/40" style="background-color: ${item.colorHex};"></div>
           </div>
+          ${artistBadge}
           <h4 class="font-bold text-sm text-[#221f1d]">${item.name}</h4>
+          ${subtitleDesc}
           <p class="text-[11px] text-[#756a5e] mb-3 leading-tight">${item.desc}</p>
         </div>
 
@@ -424,8 +464,9 @@ export class UI {
 
     const ballName = document.getElementById('garage-ball-name');
     if (ballName) ballName.textContent = findName(data.equippedBall);
+    const pencilStyle = getPencilStyle(data.equippedPencil);
     const pencilName = document.getElementById('garage-pencil-name');
-    if (pencilName) pencilName.textContent = findName(data.equippedPencil);
+    if (pencilName) pencilName.textContent = `${pencilStyle.name} (${pencilStyle.artistTitle})`;
     const trailName = document.getElementById('garage-trail-name');
     if (trailName) trailName.textContent = findName(data.equippedTrail);
     const worldName = document.getElementById('garage-world-name');
@@ -782,6 +823,32 @@ export class UI {
     }
     if (this.soundText) {
       this.soundText.textContent = enabled ? 'SOUND: ON' : 'SOUND: OFF';
+    }
+  }
+
+  public applyPencilStyle(style: PencilStyleDefinition): void {
+    if (!style || !style.uiTheme) return;
+
+    if (document.documentElement?.style?.setProperty) {
+      document.documentElement.style.setProperty('--style-accent', style.uiTheme.accentHex);
+      document.documentElement.style.setProperty('--style-border', style.uiTheme.borderHex);
+      document.documentElement.style.setProperty('--style-glow', style.uiTheme.glowHex);
+    }
+
+    const titleEl = document.getElementById('style-title');
+    const subtitleEl = document.getElementById('style-subtitle');
+    const swatchEl = document.getElementById('style-swatch');
+    if (titleEl) titleEl.textContent = style.name;
+    if (subtitleEl) subtitleEl.textContent = `${style.artistTitle} • ${style.subtitle}`;
+    if (swatchEl) {
+      swatchEl.style.backgroundColor = style.uiTheme.accentHex;
+      swatchEl.style.boxShadow = `0 0 8px ${style.uiTheme.glowHex}`;
+    }
+
+    if (this.hudComboBadge) {
+      this.hudComboBadge.style.borderColor = style.uiTheme.borderHex;
+      this.hudComboBadge.style.backgroundColor = style.uiTheme.badgeBgHex;
+      this.hudComboBadge.style.color = style.uiTheme.badgeTextHex;
     }
   }
 }

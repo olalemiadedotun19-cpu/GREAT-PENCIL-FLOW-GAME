@@ -60,6 +60,7 @@ export class PathGenerator {
     // Initial safe straight runway (so player starts with smooth footing)
     this.generateChunk('STRAIGHT', 50.0);
     this.generateChunk('STRAIGHT', 40.0);
+    this.update(0);
   }
 
   public update(playerDistance: number): void {

@@ -1,15 +1,20 @@
 import * as THREE from 'three';
-import { CONFIG } from './config';
 import { FlowPath } from './FlowPath';
-import { PathSample, randomChoice } from './utils';
+import { PathSample, randomChoice, randomRange } from './utils';
+import {
+  PowerUpDefinition,
+  POWER_UP_CATALOGUE,
+  getPowerUpDefinition,
+} from './PowerUpCatalogue';
+import { PencilStyleDefinition } from './PencilStyleSystem';
 
 export interface PowerUpInstance {
   id: number;
+  definition: PowerUpDefinition;
   distance: number;
   lateralOffset: number;
   meshGroup: THREE.Group;
   active: boolean;
-  baseY: number;
   ringMesh1: THREE.Object3D;
   ringMesh2: THREE.Object3D;
   crystalMesh: THREE.Object3D;
@@ -21,51 +26,38 @@ export class PowerUpSystem {
   private flowPath: FlowPath;
   private powerUps: PowerUpInstance[] = [];
   private nextId = 0;
-  private lastSpawnDist = 30;
+  private lastSpawnDist = 45;
   private animTimer = 0;
 
-  // Luminous Glowing Materials (Unmistakable, highly visible neon cyan & sunburst gold)
-  private crystalMat: THREE.MeshStandardMaterial;
-  private goldCapMat: THREE.MeshStandardMaterial;
-  private cyanNeonMat: THREE.LineBasicMaterial;
-  private goldNeonMat: THREE.LineBasicMaterial;
+  // Intelligent Power-Up Director state
+  private recentSpawns: string[] = [];
+  private speedBoostCooldown = 0; // Prevent speed boost spam
+  private spawnIntervalBase = 62; // Balanced interval between power-up events
+  private activeUnlockedPool: string[] = [];
+
+  // Geometries for multi-tier visual identities
+  private octaGeo: THREE.OctahedronGeometry;
+  private dodecaGeo: THREE.DodecahedronGeometry;
+  private icosaGeo: THREE.IcosahedronGeometry;
+  private ringGeo: THREE.TorusGeometry;
+  private beamGeo: THREE.CylinderGeometry;
+
+  // Shared base materials
   private beamMat: THREE.MeshBasicMaterial;
-  private auraRingMat: THREE.MeshBasicMaterial;
 
   constructor(flowPath: FlowPath) {
     this.flowPath = flowPath;
     this.group = new THREE.Group();
 
-    // Vibrant glowing cyan crystal core
-    this.crystalMat = new THREE.MeshStandardMaterial({
-      color: 0x00f0ff,
-      emissive: 0x00a8cc,
-      emissiveIntensity: 0.65,
-      roughness: 0.2,
-      metalness: 0.3,
-    });
+    // Geometries
+    this.octaGeo = new THREE.OctahedronGeometry(0.55, 0);
+    this.dodecaGeo = new THREE.DodecahedronGeometry(0.52, 0);
+    this.icosaGeo = new THREE.IcosahedronGeometry(0.56, 0);
+    this.ringGeo = new THREE.TorusGeometry(0.85, 0.035, 8, 28);
 
-    // Gleaming gold brass caps
-    this.goldCapMat = new THREE.MeshStandardMaterial({
-      color: 0xffd166,
-      emissive: 0xd4a017,
-      emissiveIntensity: 0.45,
-      roughness: 0.25,
-      metalness: 0.85,
-    });
+    this.beamGeo = new THREE.CylinderGeometry(0.65, 0.95, 14.0, 16, 1, true);
+    this.beamGeo.translate(0, 7.0, 0);
 
-    // Bright neon orbit rings
-    this.cyanNeonMat = new THREE.LineBasicMaterial({
-      color: 0x00ffff,
-      linewidth: 3,
-    });
-
-    this.goldNeonMat = new THREE.LineBasicMaterial({
-      color: 0xffe066,
-      linewidth: 3,
-    });
-
-    // Vertical translucent light pillar beam
     this.beamMat = new THREE.MeshBasicMaterial({
       color: 0x38bdf8,
       transparent: true,
@@ -74,14 +66,21 @@ export class PowerUpSystem {
       depthWrite: false,
     });
 
-    // Pulsing ground beacon ripple on road
-    this.auraRingMat = new THREE.MeshBasicMaterial({
-      color: 0x00f0ff,
-      transparent: true,
-      opacity: 0.45,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-    });
+    // Default unlocked pool
+    this.activeUnlockedPool = Object.keys(POWER_UP_CATALOGUE).filter(
+      (k) => POWER_UP_CATALOGUE[k].unlockedByDefault
+    );
+  }
+
+  public setUnlockedPool(unlockedIds: string[]): void {
+    const valid = unlockedIds.filter((id) => POWER_UP_CATALOGUE[id]);
+    this.activeUnlockedPool = valid.length > 0 ? valid : ['speed_boost', 'sketch_shield', 'score_mult', 'graphite_magnet'];
+  }
+
+  public applyPencilStyle(style: PencilStyleDefinition): void {
+    if (this.beamMat) {
+      this.beamMat.color.setHex(style.accentColor);
+    }
   }
 
   public reset(): void {
@@ -89,58 +88,58 @@ export class PowerUpSystem {
       this.group.remove(pu.meshGroup);
     }
     this.powerUps = [];
-    this.lastSpawnDist = 30;
+    this.lastSpawnDist = 45;
     this.animTimer = 0;
+    this.recentSpawns = [];
+    this.speedBoostCooldown = 0;
   }
 
   public update(playerDist: number, pencilDrawDist: number, dt: number): void {
     this.animTimer += dt;
+    if (this.speedBoostCooldown > 0) this.speedBoostCooldown -= dt;
 
-    // 1. Spawn power-ups ahead
-    const maxSpawnAhead = pencilDrawDist - 8;
-    const interval = CONFIG.powerUp.spawnInterval;
+    // 1. Spawning Director ahead of player
+    const maxSpawnAhead = pencilDrawDist - 12;
+    // Dynamic interval based on distance: slightly closer as run advances
+    const dynamicInterval = Math.max(50, this.spawnIntervalBase - Math.min(15, playerDist / 200));
 
-    while (this.lastSpawnDist + interval < maxSpawnAhead) {
-      this.lastSpawnDist += interval;
-      this.spawnPowerUpAt(this.lastSpawnDist);
+    while (this.lastSpawnDist + dynamicInterval < maxSpawnAhead) {
+      this.lastSpawnDist += dynamicInterval;
+      this.spawnDirectorPowerUp(this.lastSpawnDist, playerDist);
     }
 
-    // 2. Animate floating, counter-rotating rings and beacon pulsing
+    // 2. Animate hovering crystals, counter-rotating gyro rings, and vertical light beams
     for (const pu of this.powerUps) {
       if (!pu.active) continue;
 
       const sample = this.flowPath.getSampleAtDistance(pu.distance);
       if (sample) {
-        // Floating hover motion strictly along world vertical Y
-        const hoverY = Math.sin(this.animTimer * 4.0 + pu.id) * 0.25 + 0.95;
+        const hoverY = Math.sin(this.animTimer * 3.5 + pu.id) * 0.22 + 0.95;
         const pos = sample.position
           .clone()
           .add(sample.right.clone().multiplyScalar(pu.lateralOffset));
         pos.y += hoverY;
 
         pu.meshGroup.position.copy(pos);
-        // Ensure entire power-up group and vertical light pillar stand strictly vertical regardless of map turns
         pu.meshGroup.rotation.set(0, 0, 0);
-        pu.beaconBeam.rotation.set(0, 0, 0);
 
         // Spin crystal
-        pu.crystalMesh.rotation.y = this.animTimer * 3.5;
-        pu.crystalMesh.rotation.x = Math.sin(this.animTimer * 2.0) * 0.2;
+        pu.crystalMesh.rotation.y = this.animTimer * 2.8;
+        pu.crystalMesh.rotation.x = Math.sin(this.animTimer * 1.8) * 0.2;
 
-        // Counter-rotating neon gyro rings
-        pu.ringMesh1.rotation.y = this.animTimer * 4.5;
-        pu.ringMesh1.rotation.x = this.animTimer * 2.5;
+        // Counter-rotating rings
+        pu.ringMesh1.rotation.y = this.animTimer * 3.6;
+        pu.ringMesh1.rotation.x = this.animTimer * 2.2;
+        pu.ringMesh2.rotation.z = -this.animTimer * 3.2;
+        pu.ringMesh2.rotation.y = -this.animTimer * 1.8;
 
-        pu.ringMesh2.rotation.z = -this.animTimer * 4.0;
-        pu.ringMesh2.rotation.y = -this.animTimer * 2.0;
-
-        // Pulsing light pillar
-        const pulse = Math.sin(this.animTimer * 6.0 + pu.id) * 0.15 + 0.85;
+        // Pulsing beam
+        const pulse = Math.sin(this.animTimer * 5.0 + pu.id) * 0.15 + 0.85;
         pu.beaconBeam.scale.set(pulse, 1.0, pulse);
       }
     }
 
-    // 3. Remove power-ups well behind player
+    // 3. Prune power-ups passed by player
     const pruneDist = playerDist - 30;
     for (let i = this.powerUps.length - 1; i >= 0; i--) {
       const pu = this.powerUps[i];
@@ -151,130 +150,163 @@ export class PowerUpSystem {
     }
   }
 
-  private spawnPowerUpAt(dist: number): void {
+  /**
+   * Intelligent Director: chooses power-ups with variety, rarity weighting, and cooldowns
+   */
+  private spawnDirectorPowerUp(dist: number, playerDist: number): void {
     const sample = this.flowPath.getSampleAtDistance(dist);
     if (!sample) return;
 
-    const pathW = sample.width;
-    const halfW = pathW * 0.5;
+    // Pick rarity
+    const roll = Math.random();
+    let targetRarity = 'COMMON';
+    if (roll < 0.06 && playerDist > 150) targetRarity = 'LEGENDARY';
+    else if (roll < 0.22 && playerDist > 80) targetRarity = 'EPIC';
+    else if (roll < 0.58) targetRarity = 'RARE';
+    else targetRarity = 'COMMON';
 
-    // Place at left, center, or right lane
+    // Candidate pool: unlocked abilities matching rarity (or fallback to any unlocked)
+    let candidates = this.activeUnlockedPool.filter((id) => {
+      const def = POWER_UP_CATALOGUE[id];
+      return def && def.rarity === targetRarity;
+    });
+
+    if (candidates.length === 0) {
+      candidates = this.activeUnlockedPool;
+    }
+
+    // Filter out recent spawns to guarantee diversity
+    let filtered = candidates.filter((id) => !this.recentSpawns.includes(id));
+    if (filtered.length === 0) filtered = candidates;
+
+    // Throttle speed boost so it is no longer the sole repetitive power-up
+    if (this.speedBoostCooldown > 0) {
+      filtered = filtered.filter((id) => id !== 'speed_boost');
+      if (filtered.length === 0) filtered = candidates.filter((id) => id !== 'speed_boost');
+    }
+
+    const chosenId = randomChoice(filtered) || 'sketch_shield';
+    const def = getPowerUpDefinition(chosenId);
+
+    // Track spawn
+    this.recentSpawns.push(chosenId);
+    if (this.recentSpawns.length > 5) this.recentSpawns.shift();
+    if (chosenId === 'speed_boost') this.speedBoostCooldown = 25.0; // 25s cooldown before speed boost can appear again!
+
+    // Position across 3 lanes
+    const halfW = sample.width * 0.5;
     const laneChoice = randomChoice([-0.5, 0, 0.5]);
     const lateralOffset = laneChoice * (halfW - 2.0);
 
     const puGroup = new THREE.Group();
 
-    // 1. Vertical Translucent Light Pillar Beam (Pillar stands strictly vertical into the sky)
-    const beamGeo = new THREE.CylinderGeometry(0.7, 1.0, 16.0, 16, 1, true);
-    beamGeo.translate(0, 8.0, 0);
-    const beaconBeam = new THREE.Mesh(beamGeo, this.beamMat);
+    // 1. Vertical Light Pillar
+    const beamMatInstance = this.beamMat.clone();
+    beamMatInstance.color.set(def.colorHex);
+    const beaconBeam = new THREE.Mesh(this.beamGeo, beamMatInstance);
     puGroup.add(beaconBeam);
 
-    // 2. Pulsing Ground Beacon Rings on the road surface
-    const rippleGeo = new THREE.RingGeometry(0.7, 1.15, 20);
-    rippleGeo.rotateX(-Math.PI / 2);
-    rippleGeo.translate(0, -0.75, 0);
-    const rippleMesh = new THREE.Mesh(rippleGeo, this.auraRingMat);
-    puGroup.add(rippleMesh);
+    // 2. Crystal Core Geometry based on rarity
+    let coreGeo: THREE.BufferGeometry = this.octaGeo;
+    if (def.rarity === 'LEGENDARY' || def.rarity === 'EPIC') {
+      coreGeo = this.icosaGeo;
+    } else if (def.rarity === 'RARE') {
+      coreGeo = this.dodecaGeo;
+    }
 
-    // 3. Floating Cyan Crystal Core (Faceted Diamond Gem)
-    const crystalGeo = new THREE.OctahedronGeometry(0.55, 1);
-    const crystalMesh = new THREE.Mesh(crystalGeo, this.crystalMat);
+    const crystalMat = new THREE.MeshStandardMaterial({
+      color: new THREE.Color(def.colorHex),
+      emissive: new THREE.Color(def.emissiveHex),
+      emissiveIntensity: 0.65,
+      roughness: 0.25,
+      metalness: 0.45,
+    });
+    const crystalMesh = new THREE.Mesh(coreGeo, crystalMat);
     crystalMesh.castShadow = true;
     puGroup.add(crystalMesh);
 
-    // Top and Bottom Gold Refill Caps (Pencil lead clutch container tips)
-    const capTopGeo = new THREE.ConeGeometry(0.25, 0.45, 8);
-    capTopGeo.translate(0, 0.65, 0);
-    const capTop = new THREE.Mesh(capTopGeo, this.goldCapMat);
-    crystalMesh.add(capTop);
-
-    const capBtmGeo = new THREE.ConeGeometry(0.25, 0.45, 8);
-    capBtmGeo.rotateX(Math.PI);
-    capBtmGeo.translate(0, -0.65, 0);
-    const capBtm = new THREE.Mesh(capBtmGeo, this.goldCapMat);
-    crystalMesh.add(capBtm);
-
-    // 4. Counter-Rotating Gyroscopic Neon Rings
-    // Ring 1 (Cyan)
-    const ring1Pts: THREE.Vector3[] = [];
-    const segs = 24;
-    const rad1 = 0.95;
-    for (let s = 0; s <= segs; s++) {
-      const th = (s / segs) * Math.PI * 2;
-      ring1Pts.push(new THREE.Vector3(Math.cos(th) * rad1, 0, Math.sin(th) * rad1));
-    }
-    const ring1Geo = new THREE.BufferGeometry().setFromPoints(ring1Pts);
-    const ringMesh1 = new THREE.Line(ring1Geo, this.cyanNeonMat);
-    ringMesh1.rotation.x = Math.PI / 4;
+    // 3. Counter-rotating holographic Gyro Orbit Rings
+    const ringMat1 = new THREE.LineBasicMaterial({
+      color: new THREE.Color(def.colorHex),
+      linewidth: 2,
+    });
+    const ringMesh1 = new THREE.LineSegments(new THREE.EdgesGeometry(this.ringGeo), ringMat1);
     puGroup.add(ringMesh1);
 
-    // Ring 2 (Sunburst Gold)
-    const ring2Pts: THREE.Vector3[] = [];
-    const rad2 = 0.78;
-    for (let s = 0; s <= segs; s++) {
-      const th = (s / segs) * Math.PI * 2;
-      ring2Pts.push(new THREE.Vector3(Math.cos(th) * rad2, 0, Math.sin(th) * rad2));
-    }
-    const ring2Geo = new THREE.BufferGeometry().setFromPoints(ring2Pts);
-    const ringMesh2 = new THREE.Line(ring2Geo, this.goldNeonMat);
-    ringMesh2.rotation.z = Math.PI / 3;
+    const ringMat2 = new THREE.LineBasicMaterial({
+      color: new THREE.Color(def.emissiveHex),
+      linewidth: 2,
+    });
+    const ringMesh2 = new THREE.LineSegments(new THREE.EdgesGeometry(this.ringGeo), ringMat2);
+    ringMesh2.scale.set(0.8, 0.8, 0.8);
     puGroup.add(ringMesh2);
 
-    // 5. Floating 3D Lightning Icon Badge hovering directly above
-    const boltPts = [
-      new THREE.Vector3(0, 0.65, 0),
-      new THREE.Vector3(-0.25, 0.15, 0),
-      new THREE.Vector3(0.05, 0.15, 0),
-      new THREE.Vector3(-0.15, -0.45, 0),
-      new THREE.Vector3(0.3, -0.05, 0),
-      new THREE.Vector3(0.05, -0.05, 0),
-      new THREE.Vector3(0.25, 0.65, 0),
-    ];
-    const boltGeo = new THREE.BufferGeometry().setFromPoints(boltPts);
-    const boltLine = new THREE.Line(boltGeo, this.goldNeonMat);
-    boltLine.position.y = 1.15;
-    puGroup.add(boltLine);
-
-    puGroup.traverse((child) => {
-      child.frustumCulled = false;
+    // 4. Ground Contact Ripple Ring
+    const groundRingGeo = new THREE.RingGeometry(0.8, 0.95, 24);
+    groundRingGeo.rotateX(-Math.PI / 2);
+    const groundRingMat = new THREE.MeshBasicMaterial({
+      color: new THREE.Color(def.colorHex),
+      transparent: true,
+      opacity: 0.4,
+      side: THREE.DoubleSide,
+      depthWrite: false,
     });
+    const groundRing = new THREE.Mesh(groundRingGeo, groundRingMat);
+    groundRing.position.y = 0.04;
+    puGroup.add(groundRing);
 
-    const pu: PowerUpInstance = {
+    puGroup.position.set(sample.position.x, sample.position.y + 0.9, sample.position.z);
+    this.group.add(puGroup);
+
+    this.powerUps.push({
       id: this.nextId++,
+      definition: def,
       distance: dist,
       lateralOffset,
       meshGroup: puGroup,
       active: true,
-      baseY: 0.85,
       ringMesh1,
       ringMesh2,
       crystalMesh,
       beaconBeam,
-    };
-
-    this.group.add(puGroup);
-    this.powerUps.push(pu);
+    });
   }
 
   public checkCollection(
     playerDist: number,
-    lateralOffset: number,
-    jumpHeight: number
+    playerLateral: number,
+    jumpHeight = 0
   ): PowerUpInstance | null {
-    for (let i = 0; i < this.powerUps.length; i++) {
-      const pu = this.powerUps[i];
+    for (const pu of this.powerUps) {
       if (!pu.active) continue;
 
-      const dDist = Math.abs(playerDist - pu.distance);
-      const dLat = Math.abs(lateralOffset - pu.lateralOffset);
+      const distDelta = Math.abs(pu.distance - playerDist);
+      const lateralDelta = Math.abs(pu.lateralOffset - playerLateral);
 
-      // Generous collection radius
-      if (dDist < 1.6 && dLat < 1.5 && jumpHeight < 2.5) {
+      if (distDelta < 2.5 && lateralDelta < 1.7 && jumpHeight < 3.0) {
         pu.active = false;
         this.group.remove(pu.meshGroup);
-        this.powerUps.splice(i, 1);
         return pu;
+      }
+    }
+    return null;
+  }
+
+  public checkCollisions(
+    playerDist: number,
+    playerLateral: number,
+    radius: number
+  ): PowerUpDefinition | null {
+    for (const pu of this.powerUps) {
+      if (!pu.active) continue;
+
+      const distDelta = Math.abs(pu.distance - playerDist);
+      const lateralDelta = Math.abs(pu.lateralOffset - playerLateral);
+
+      if (distDelta < 2.2 && lateralDelta < radius + 1.25) {
+        pu.active = false;
+        this.group.remove(pu.meshGroup);
+        return pu.definition;
       }
     }
     return null;

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { CONFIG } from './config';
 import { PathSample } from './utils';
+import { PencilStyleDefinition } from './PencilStyleSystem';
 
 export class Pencil {
   public group: THREE.Group;
@@ -212,6 +213,22 @@ export class Pencil {
         tipMat.color.setHex(0x78350f);
         ferruleMat.color.setHex(0xfef3c7);
         break;
+      case 'neon_sketch':
+        bodyMat.color.setHex(0x06b6d4);
+        bodyMat.roughness = 0.15;
+        bodyMat.metalness = 0.9;
+        woodMat.color.setHex(0x1e293b);
+        tipMat.color.setHex(0x06b6d4);
+        ferruleMat.color.setHex(0xec4899);
+        break;
+      case 'watercolor_brush':
+        bodyMat.color.setHex(0x4f46e5);
+        bodyMat.roughness = 0.35;
+        bodyMat.metalness = 0.3;
+        woodMat.color.setHex(0xf3e8ff);
+        tipMat.color.setHex(0x4f46e5);
+        ferruleMat.color.setHex(0xd946ef);
+        break;
       case 'classic_hb':
       default:
         bodyMat.color.setHex(0xebb13a);
@@ -221,6 +238,17 @@ export class Pencil {
         tipMat.color.setHex(0x181615);
         ferruleMat.color.setHex(0xd0cfcb);
         break;
+    }
+  }
+
+  public applyPencilStyle(style: PencilStyleDefinition): void {
+    if (!style) return;
+    this.setSkin(style.id);
+    if (this.tipMesh?.material) {
+      (this.tipMesh.material as THREE.MeshStandardMaterial).color.setHex(style.primaryColor);
+    }
+    if (this.leadStrokeLine?.material) {
+      (this.leadStrokeLine.material as THREE.LineBasicMaterial).color.setHex(style.primaryColor);
     }
   }
 

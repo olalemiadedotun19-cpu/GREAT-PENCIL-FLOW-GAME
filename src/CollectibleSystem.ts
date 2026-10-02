@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { FlowPath } from './FlowPath';
 import { LANES } from './ObstacleSystem';
 import { randomChoice, randomRange } from './utils';
+import { PencilStyleDefinition } from './PencilStyleSystem';
 
 export interface GraphitePiece {
   id: number;
@@ -49,6 +50,18 @@ export class CollectibleSystem {
       opacity: 0.3,
       wireframe: true,
     });
+  }
+
+  public applyPencilStyle(style: PencilStyleDefinition): void {
+    if (!style) return;
+    if (this.graphiteMat) {
+      this.graphiteMat.color.setHex(style.collectibleColor);
+      this.graphiteMat.emissive.setHex(style.collectibleEmissive);
+      this.graphiteMat.emissiveIntensity = 0.45;
+    }
+    if (this.haloMat) {
+      this.haloMat.color.setHex(style.collectibleHaloColor);
+    }
   }
 
   public reset(): void {

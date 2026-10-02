@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { CONFIG } from './config';
 import { FlowPath } from './FlowPath';
 import { PathSample, sketchJitter } from './utils';
+import { PencilStyleDefinition, PENCIL_STYLES } from './PencilStyleSystem';
 
 // 4 vertices across the width per sample:
 // 0: Left raised curb rim (+lift, -halfW)
@@ -17,6 +18,7 @@ const MAX_INDICES = (MAX_SAMPLES - 1) * QUADS_PER_SEGMENT * 6;
 export class DrawingSystem {
   public group: THREE.Group;
   private flowPath: FlowPath;
+  private currentStyle: PencilStyleDefinition = PENCIL_STYLES['classic_hb'];
 
   // Path ribbon mesh (sculpted curved channel with raised curbs)
   private ribbonGeo: THREE.BufferGeometry;
@@ -199,7 +201,47 @@ export class DrawingSystem {
     this.group.add(this.centerLine);
   }
 
+  public applyPencilStyle(style: PencilStyleDefinition): void {
+    if (!style) return;
+    this.currentStyle = style;
+
+    // 1. Update ribbon material & road texture
+    this.ribbonMat.color.setHex(style.roadBedColor);
+    this.ribbonMat.roughness = style.roadRoughness;
+    this.ribbonMat.metalness = style.roadMetalness;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 256;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      style.drawRoadTexture(ctx, 256, 256);
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.wrapS = THREE.RepeatWrapping;
+      texture.wrapT = THREE.RepeatWrapping;
+      texture.repeat.set(1, 4);
+      if (this.ribbonMat.map) this.ribbonMat.map.dispose();
+      this.ribbonMat.map = texture;
+      this.ribbonMat.needsUpdate = true;
+    }
+
+    // 2. Update edge strokes, crease lines, and center lines
+    this.lineMat.color.setHex(style.roadLineColor);
+    this.creaseMat.color.setHex(style.roadCreaseColor);
+    this.centerMat.color.setHex(style.roadCenterColor);
+
+    // 3. Update jitter character for authentic physical drawing
+    const baseJitter = style.roadCurvatureJitter;
+    for (let i = 0; i < this.jitterTable.length; i++) {
+      this.jitterTable[i] = sketchJitter(baseJitter);
+    }
+  }
+
   public applyDynamicStageVisuals(visuals: { roadColor: THREE.Color; lineColor: THREE.Color }): void {
+    // Custom equipped pencil styles define the world's master art direction!
+    if (this.currentStyle && this.currentStyle.id !== 'classic_hb') {
+      return;
+    }
     this.ribbonMat.color.copy(visuals.roadColor);
     this.lineMat.color.copy(visuals.lineColor);
     this.creaseMat.color.copy(visuals.lineColor);
@@ -406,15 +448,16 @@ export class DrawingSystem {
     jitterSeed: number
   ): void {
     const halfW = width * 0.5;
-    const innerW = halfW * 0.72; // inner bed width
+    const innerRatio = this.currentStyle ? this.currentStyle.roadInnerWidthRatio : 0.72;
+    const innerW = halfW * innerRatio; // style-aware inner bed width
 
     // Small stable jitter for sketch imperfections
     const jIndex = Math.abs(jitterSeed * 4) % this.jitterTable.length;
     const jLeft = this.jitterTable[jIndex];
     const jRight = this.jitterTable[jIndex + 1];
 
-    // Banked raised curb lift: 0.35m raised curb height
-    const curbLift = 0.35;
+    // Banked raised curb lift adapted to pencil style
+    const curbLift = this.currentStyle ? this.currentStyle.roadCurbLift : 0.35;
 
     // 4 Vertices across width:
     // v0: Outer Left Curb Rim (+curbLift, -halfW)

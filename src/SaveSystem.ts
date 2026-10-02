@@ -150,7 +150,17 @@ export class SaveSystem {
       equippedTrail: 'graphite_dust',
       equippedWorld: 'paper',
       unlockedBalls: ['classic'],
-      unlockedPencils: ['classic_hb'],
+      unlockedPencils: [
+        'classic_hb',
+        'blueprint_stylus',
+        'crimson_red',
+        '4b_soft',
+        'neon_sketch',
+        'watercolor_brush',
+        'mechanical_05',
+        'golden_quill',
+        '2b_dark',
+      ],
       unlockedTrails: ['graphite_dust'],
       unlockedWorlds: ['paper', 'sketch_city'],
       dailyStreak: 0,
@@ -200,6 +210,24 @@ export class SaveSystem {
         merged.settings = { ...this.getDefaultData().settings, ...(parsed.settings || {}) };
         if (!Array.isArray(merged.discoveries)) {
           merged.discoveries = ['world_sketchbook'];
+        }
+        const allPencils = [
+          'classic_hb',
+          'blueprint_stylus',
+          'crimson_red',
+          '4b_soft',
+          'neon_sketch',
+          'watercolor_brush',
+          'mechanical_05',
+          'golden_quill',
+          '2b_dark',
+        ];
+        if (!Array.isArray(merged.unlockedPencils)) {
+          merged.unlockedPencils = [...allPencils];
+        } else {
+          for (const p of allPencils) {
+            if (!merged.unlockedPencils.includes(p)) merged.unlockedPencils.push(p);
+          }
         }
         // Merge achievements to preserve new ones
         if (!merged.achievements || merged.achievements.length < INITIAL_ACHIEVEMENTS.length) {

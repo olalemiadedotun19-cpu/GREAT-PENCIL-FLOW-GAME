@@ -131,19 +131,26 @@ export class CameraController {
       this._targetUp.copy(this._worldUp);
     } else {
       // 1. CALCULATE ROAD CURVATURE DIRECTION & ANTICIPATION
-      const aheadDist = ballState.distance + 15.0;
+      const aheadDist = ballState.distance + 18.0;
       const sampleAhead = flowPath ? flowPath.getSampleAtDistance(aheadDist) : null;
       const aheadTangent = sampleAhead ? sampleAhead.tangent : pathSample.tangent;
 
-      this._roadDir.copy(pathSample.tangent).lerp(aheadTangent, 0.48).normalize();
+      this._roadDir.copy(pathSample.tangent).lerp(aheadTangent, 0.5).normalize();
       this._roadRight.crossVectors(this._roadDir, pathSample.normal).normalize();
 
-      // 2. ADAPTIVE ELEVATION & DOWNHILL OCCLUSION PROTECTION:
-      // When going downhill (negative roadDir.y), the camera lifts up dynamically
-      // so the road crest behind NEVER covers or blocks the view ahead!
-      const downhillFactor = Math.max(0, -this._roadDir.y);
-      const distBehind = CONFIG.camera.distanceBehind || 8.2;
-      const heightAbove = (CONFIG.camera.heightAbove || 4.5) + 0.7 + (downhillFactor * 2.8);
+      // 2. PATH ELEVATION & DOWNHILL VISIBILITY PROTECTION:
+      // Computes future road gradient to adjust camera elevation before the drop
+      let forwardSlope = pathSample.tangent.y;
+      const slopeLookaheadSample = flowPath ? flowPath.getSampleAtDistance(ballState.distance + 26.0) : null;
+      if (slopeLookaheadSample) {
+        forwardSlope = (slopeLookaheadSample.position.y - ballPos.y) / 26.0;
+      }
+      const downhillFactor = Math.max(0, -forwardSlope);
+
+      // When descending, the camera lifts up and tucks slightly closer
+      // so the player looks cleanly DOWN the slope without crests blocking the view!
+      const distBehind = Math.max(6.4, (CONFIG.camera.distanceBehind || 8.2) - downhillFactor * 2.2);
+      const heightAbove = (CONFIG.camera.heightAbove || 4.5) + 0.8 + (downhillFactor * 4.2);
 
       this._targetPos.copy(ballPos)
         .addScaledVector(this._roadDir, -distBehind)
@@ -156,30 +163,29 @@ export class CameraController {
         const behindDist = Math.max(0, ballState.distance - distBehind);
         const behindSample = flowPath.getSampleAtDistance(behindDist);
         if (behindSample) {
-          this._targetPos.y = Math.max(this._targetPos.y, behindSample.position.y + 3.4);
+          this._targetPos.y = Math.max(this._targetPos.y, behindSample.position.y + 3.6);
         }
 
         // Road surface at midpoint
         const midDist = Math.max(0, ballState.distance - distBehind * 0.5);
         const midSample = flowPath.getSampleAtDistance(midDist);
         if (midSample) {
-          this._targetPos.y = Math.max(this._targetPos.y, midSample.position.y + 3.0);
+          this._targetPos.y = Math.max(this._targetPos.y, midSample.position.y + 3.2);
         }
       }
 
-      this._targetPos.y = Math.max(this._targetPos.y, ballPos.y + 2.5);
+      this._targetPos.y = Math.max(this._targetPos.y, ballPos.y + 2.6);
 
-      // 4. TRUE PATH-AWARE FORWARD LOOK-AHEAD TARGET:
-      // Samples the future track ahead so oncoming curves, crests, and hazards are always framed in full view!
+      // 4. PATH-AWARE FORWARD LOOK-AHEAD TARGET (Looks down into descents):
       const ballSpeed = typeof ballState.currentSpeed === 'number' ? ballState.currentSpeed : CONFIG.player.startSpeed;
-      const lookAheadDist = Math.max(16.0, (CONFIG.camera.lookAheadDistance || 18.0) + (ballSpeed / 22.0) * 7.0 + downhillFactor * 8.0);
+      const lookAheadDist = Math.max(22.0, (CONFIG.camera.lookAheadDistance || 18.0) + (ballSpeed / 20.0) * 8.0 + downhillFactor * 18.0);
       
       let lookedAtPath = false;
       if (flowPath) {
         const lookSample = flowPath.getSampleAtDistance(ballState.distance + lookAheadDist);
         if (lookSample) {
           this._targetLook.copy(lookSample.position)
-            .addScaledVector(lookSample.normal, 1.4)
+            .addScaledVector(lookSample.normal, 1.6)
             .addScaledVector(lookSample.right, ballState.lateralOffset * 0.2);
           lookedAtPath = true;
         }
@@ -188,7 +194,7 @@ export class CameraController {
       if (!lookedAtPath) {
         this._targetLook.copy(ballPos)
           .addScaledVector(this._roadDir, lookAheadDist)
-          .addScaledVector(pathSample.normal, 1.4)
+          .addScaledVector(pathSample.normal, 1.6)
           .addScaledVector(this._roadRight, ballState.lateralOffset * 0.2);
       }
 

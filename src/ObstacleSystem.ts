@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { CONFIG } from './config';
 import { FlowPath } from './FlowPath';
 import { randomChoice, randomRange } from './utils';
+import { PencilStyleDefinition } from './PencilStyleSystem';
 
 export type ObstacleCategory =
   | 'FLOOR'
@@ -153,6 +154,33 @@ export class ObstacleSystem {
     this.dangerOrangeMat = new THREE.MeshStandardMaterial({ color: 0xe65100, roughness: 0.4, metalness: 0.2 });
     this.lineDarkMat = new THREE.LineBasicMaterial({ color: 0x221f1d, linewidth: 1.5 });
     this.dangerBeaconMat = new THREE.MeshBasicMaterial({ color: 0xff1e42 });
+  }
+
+  public applyPencilStyle(style: PencilStyleDefinition): void {
+    if (!style || !style.obstacleTheme) return;
+    this.lineDarkMat.color.setHex(style.outlineColor);
+    this.graphiteMat.color.setHex(style.primaryColor);
+    this.graphiteMat.roughness = style.obstacleTheme.shadingRoughness;
+    this.inkGlossMat.color.setHex(style.secondaryColor);
+
+    this.metalSteelMat.color.setHex(style.obstacleTheme.metalColor);
+    this.metalSteelMat.roughness = style.obstacleTheme.shadingRoughness;
+    this.pinkRubberMat.color.setHex(style.obstacleTheme.bodyColor);
+    this.blueEraserMat.color.setHex(style.secondaryColor);
+    this.kneadedPuttyMat.color.setHex(style.foundationColor);
+    this.brassMat.color.setHex(style.obstacleTheme.accentColor);
+    this.amberAcrylicMat.color.setHex(style.accentColor);
+    this.cyanAcrylicMat.color.setHex(style.secondaryColor);
+    this.woodRulerMat.color.setHex(style.obstacleTheme.bodyColor);
+    this.pushpinRedMat.color.setHex(style.primaryColor);
+    this.paperCrumpleMat.color.setHex(style.paperColor);
+    this.neonYellowMat.color.setHex(style.accentColor);
+    this.neonYellowMat.emissive.setHex(style.obstacleTheme.emissiveColor);
+    this.neonYellowMat.emissiveIntensity = style.obstacleTheme.emissiveIntensity;
+    this.plasticWhiteMat.color.setHex(style.buildingFacadeColor);
+    this.rubberRedMat.color.setHex(style.primaryColor);
+    this.dangerOrangeMat.color.setHex(style.accentColor);
+    this.dangerBeaconMat.color.setHex(style.accentColor);
   }
 
   public reset(): void {
@@ -316,9 +344,23 @@ export class ObstacleSystem {
   }
 
   /**
-   * Procedural stage-aware obstacle pattern generation
+   * Procedural stage-aware obstacle pattern generation with Visibility Validation
    */
   private spawnObstaclePatternAt(dist: number, playerDist: number, stageName: string): void {
+    // 1. VISIBILITY & CREST SAFETY VALIDATION:
+    // Ensure obstacles are never placed blindly right behind a convex crest or steep drop
+    let safeDist = dist;
+    const sample = this.flowPath.getSampleAtDistance(safeDist);
+    const prevSample = this.flowPath.getSampleAtDistance(safeDist - 14.0);
+    if (sample && prevSample) {
+      const slopeDelta = sample.tangent.y - prevSample.tangent.y;
+      // Convex crest detected right before obstacle placement: push obstacle forward down the slope
+      // so the player has ample sightlines when cresting the hill
+      if (slopeDelta < -0.28) {
+        safeDist += 12.0;
+      }
+    }
+
     // Select obstacle category based on current stage
     let allowedCategories: ObstacleCategory[] = ['FLOOR'];
 
@@ -339,23 +381,23 @@ export class ObstacleSystem {
 
     switch (chosenCategory) {
       case 'OVERHEAD':
-        this.spawnOverheadObstacle(dist);
+        this.spawnOverheadObstacle(safeDist);
         break;
       case 'SIDE_CLOSING':
-        this.spawnSideClosingObstacle(dist);
+        this.spawnSideClosingObstacle(safeDist);
         break;
       case 'MOVING':
-        this.spawnMovingObstacle(dist);
+        this.spawnMovingObstacle(safeDist);
         break;
       case 'VERTICAL':
-        this.spawnVerticalObstacle(dist);
+        this.spawnVerticalObstacle(safeDist);
         break;
       case 'RISK_SPLIT':
-        this.spawnRiskSplitObstacle(dist);
+        this.spawnRiskSplitObstacle(safeDist);
         break;
       case 'FLOOR':
       default:
-        this.spawnFloorObstacle(dist, playerDist);
+        this.spawnFloorObstacle(safeDist, playerDist);
         break;
     }
   }

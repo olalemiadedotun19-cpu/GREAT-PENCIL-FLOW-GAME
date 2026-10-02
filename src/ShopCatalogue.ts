@@ -39,6 +39,8 @@ export const SHOP_ITEMS: ShopItem[] = [
   { id: 'mechanical_05', category: 'PENCIL', name: 'Precision 0.5mm', desc: 'Silver knurled steel mechanical pencil for razor-sharp lines.', priceType: 'GRAPHITE', price: 1600, rarity: 'EPIC', colorHex: '#adb5bd' },
   { id: 'blueprint_stylus', category: 'PENCIL', name: 'Architect Blueprint', desc: 'Technical cyan drafting lead holder for blueprints.', priceType: 'LEAD', price: 25, rarity: 'EPIC', colorHex: '#0284c7' },
   { id: 'crimson_red', category: 'PENCIL', name: 'Editorial Crimson', desc: 'Carmine red editing pencil for striking danger marks.', priceType: 'LEAD', price: 30, rarity: 'EPIC', colorHex: '#dc2626' },
+  { id: 'neon_sketch', category: 'PENCIL', name: 'Neon Cyber Stylus', desc: 'Luminous vector stylus creating glowing neon lines on midnight slate.', priceType: 'LEAD', price: 45, rarity: 'LEGENDARY', colorHex: '#06b6d4' },
+  { id: 'watercolor_brush', category: 'PENCIL', name: 'Artist Watercolor', desc: 'Fine watercolor brush with translucent washes and bleeding pigment edges.', priceType: 'GRAPHITE', price: 1800, rarity: 'EPIC', colorHex: '#4f46e5' },
   { id: 'golden_quill', category: 'PENCIL', name: 'Royal Gold Quill', desc: 'Solid brass luxury drafting instrument with gold gilding.', priceType: 'LEAD', price: 60, rarity: 'LEGENDARY', colorHex: '#d97706' },
 
   // WORLDS

@@ -17,6 +17,8 @@ import { CollectibleSystem } from './CollectibleSystem';
 import { AudioManager } from './AudioManager';
 import { SaveSystem } from './SaveSystem';
 import { WorldEvolutionSystem } from './WorldEvolutionSystem';
+import { SkySystem } from './SkySystem';
+import { getPencilStyle } from './PencilStyleSystem';
 import { UI } from './UI';
 
 export class Game {
@@ -42,6 +44,7 @@ export class Game {
   private cameraController: CameraController;
   private effects: Effects;
   private citySystem: CitySystem;
+  private skySystem: SkySystem;
   private worldEvolutionSystem: WorldEvolutionSystem;
   private inputController: InputController;
   private ui: UI;
@@ -145,6 +148,10 @@ export class Game {
     this.citySystem = new CitySystem(this.flowPath);
     this.scene.add(this.citySystem.group);
 
+    // Living Hand-Drawn Sky System (Clouds, Radiant Compass Sun, Silhouettes, Floating Dust)
+    this.skySystem = new SkySystem();
+    this.scene.add(this.skySystem.group);
+
     // World Evolution & Progressive Chapter System
     this.worldEvolutionSystem = new WorldEvolutionSystem(this.flowPath, this.saveSystem);
     this.scene.add(this.worldEvolutionSystem.group);
@@ -152,6 +159,7 @@ export class Game {
     this.worldEvolutionSystem.onStageChanged = (stage) => {
       this.ui.showToast(`${stage.chapter}: ${stage.name}`);
       this.audioManager.playPerfectLanding();
+      this.skySystem.applyStageTheme(stage);
     };
 
     this.worldEvolutionSystem.onSetPieceTriggered = (event) => {
@@ -166,9 +174,6 @@ export class Game {
       this.ui.showToast(`DISCOVERED: ${name} (+${xp} XP)`);
       this.saveSystem.addXP(xp);
     };
-
-    // Apply saved cosmetics & settings
-    this.applyEquippedCosmetics();
 
     // 5. Input
     this.inputController = new InputController(this.canvas, {
@@ -208,7 +213,7 @@ export class Game {
         },
         onEquipCosmetic: (cat, id) => {
           if (cat === 'BALL') this.playerBall.setSkin(id);
-          else if (cat === 'PENCIL') this.pencil.setSkin(id);
+          else if (cat === 'PENCIL') this.applyPencilStyle(id);
           else if (cat === 'TRAIL') this.effects.setTrailSkin(id);
           else if (cat === 'WORLD') this.applyWorldTheme(id);
         },
@@ -216,6 +221,9 @@ export class Game {
       },
       this.saveSystem
     );
+
+    // Apply saved cosmetics & pencil styles now that all systems including UI are instantiated
+    this.applyEquippedCosmetics();
 
     // Subscribe UI to GameState events
     this.gameState.subscribe({
@@ -253,12 +261,49 @@ export class Game {
     }
   }
 
+  public applyPencilStyle(pencilId: string): void {
+    const style = getPencilStyle(pencilId);
+    if (!style) return;
+
+    // 1. Atmosphere: Background canvas clear color & fog
+    this.renderer.setClearColor(style.paperColor, 1);
+    if (this.scene.fog instanceof THREE.Fog) {
+      this.scene.fog.color.setHex(style.fogColor);
+      this.scene.fog.near = style.fogNear;
+      this.scene.fog.far = style.fogFar;
+    }
+
+    // 2. Lighting: Directional sunlight & Ambient illumination
+    if (this.dirLight) {
+      this.dirLight.color.setHex(style.dirLightColor);
+      this.dirLight.intensity = style.dirLightIntensity;
+    }
+    if (this.ambientLight) {
+      this.ambientLight.color.setHex(style.ambientColor);
+      this.ambientLight.intensity = style.ambientIntensity;
+    }
+
+    // 3. Complete World Systems Transformation
+    if (this.drawingSystem?.applyPencilStyle) this.drawingSystem.applyPencilStyle(style);
+    if (this.citySystem?.applyPencilStyle) this.citySystem.applyPencilStyle(style);
+    if (this.obstacleSystem?.applyPencilStyle) this.obstacleSystem.applyPencilStyle(style);
+    if (this.skySystem?.applyPencilStyle) this.skySystem.applyPencilStyle(style);
+    if (this.effects?.applyPencilStyle) this.effects.applyPencilStyle(style);
+    if (this.collectibleSystem?.applyPencilStyle) this.collectibleSystem.applyPencilStyle(style);
+    if (this.powerUpSystem?.applyPencilStyle) this.powerUpSystem.applyPencilStyle(style);
+    if (this.playerBall?.applyPencilStyle) this.playerBall.applyPencilStyle(style);
+    if (this.pencil?.applyPencilStyle) this.pencil.applyPencilStyle(style);
+    if (this.ui?.applyPencilStyle) this.ui.applyPencilStyle(style);
+  }
+
   private applyEquippedCosmetics(): void {
     const data = this.saveSystem.getData();
     this.playerBall.setSkin(data.equippedBall);
-    this.pencil.setSkin(data.equippedPencil);
+    this.applyPencilStyle(data.equippedPencil);
     this.effects.setTrailSkin(data.equippedTrail);
-    this.applyWorldTheme(data.equippedWorld);
+    if (data.equippedWorld && data.equippedWorld !== 'paper') {
+      this.applyWorldTheme(data.equippedWorld);
+    }
   }
 
   public applyWorldTheme(worldId: string): void {
@@ -321,6 +366,7 @@ export class Game {
     this.obstacleSystem.reset();
     this.collectibleSystem.reset();
     this.citySystem.reset();
+    this.skySystem.reset();
     this.powerUpSystem.reset();
     this.effects.reset();
     this.worldEvolutionSystem.reset();
@@ -476,17 +522,23 @@ export class Game {
     // 7. Update World Evolution, blended atmospheric visuals & set-piece events
     this.worldEvolutionSystem.update(playerDist, dt);
     const visuals = this.worldEvolutionSystem.getBlendedVisuals();
-    this.renderer.setClearColor(visuals.paperColor, 1);
-    if (this.scene.fog instanceof THREE.Fog) {
-      this.scene.fog.color.copy(visuals.fogColor);
-      this.scene.fog.near = visuals.fogNear;
-      this.scene.fog.far = visuals.fogFar;
+    const equippedPencil = this.saveSystem.getData().equippedPencil;
+    if (equippedPencil === 'classic_hb') {
+      this.renderer.setClearColor(visuals.paperColor, 1);
+      if (this.scene.fog instanceof THREE.Fog) {
+        this.scene.fog.color.copy(visuals.fogColor);
+        this.scene.fog.near = visuals.fogNear;
+        this.scene.fog.far = visuals.fogFar;
+      }
     }
     this.drawingSystem.applyDynamicStageVisuals(visuals);
     this.citySystem.applyDynamicStageVisuals(visuals);
 
     // 8. Update stage-aware environment scenery around the track
-    this.citySystem.update(playerDist, this.pencilDrawDistance);
+    this.citySystem.update(playerDist, this.pencilDrawDistance, dt);
+
+    // Living Hand-Drawn Sky System update
+    this.skySystem.update(this.cameraController.camera.position, dt);
 
     // 9. Update in-run collectible graphite shards
     this.collectibleSystem.update(playerDist, this.pencilDrawDistance, dt);
@@ -729,6 +781,8 @@ export class Game {
       );
       this.cameraController.camera.lookAt(0, 1.2, -14);
     }
+    this.citySystem.update(0, this.pencilDrawDistance, dt);
+    this.skySystem.update(this.cameraController.camera.position, dt);
   }
 
   private updateGameOver(dt: number): void {
@@ -737,6 +791,7 @@ export class Game {
     }
     this.cameraController.update(this.playerBall, null, dt);
     this.effects.update(dt, this.playerBall.getPosition());
+    this.skySystem.update(this.cameraController.camera.position, dt);
   }
 
   private onResize(): void {
